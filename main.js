@@ -2,11 +2,30 @@ import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+import Color from '@tiptap/extension-color'
+import { TextStyle } from '@tiptap/extension-text-style'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 
+// 生成随机颜色
+function generateRandomColor() {
+    const colors = [
+        '#FF6B6B', // 红色
+        '#4ECDC4', // 青色
+        '#45B7D1', // 蓝色
+        '#96CEB4', // 绿色
+        '#FFEAA7', // 黄色
+        '#DDA0DD', // 紫色
+        '#98D8C8', // 薄荷绿
+        '#F7DC6F', // 金黄色
+        '#BB8FCE', // 淡紫色
+        '#85C1E9'  // 天蓝色
+    ]
+    return colors[Math.floor(Math.random() * colors.length)]
+}
+
 const userId = '用户' + Math.floor(Math.random() * 1000)
-const userColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')
+const userColor = generateRandomColor()
 const userName = userId
 
 // 始终使用当前访问的主机名，这样其他电脑访问时会自动连接到你的服务器
@@ -79,12 +98,14 @@ async function initEditor(documentName) {
             if (status === 'connected') {
                 console.log('>>> Connected!')
                 updateConnectionStatus('connected')
-                // 只在首次连接时创建编辑器，避免重复创建
-                if (!isEditorCreated) {
-                    console.log('>>> Creating editor for the first time...')
-                    isEditorCreated = true
-                    createEditor()
-                }
+                // 等待 awareness 完全初始化后再创建编辑器
+                setTimeout(() => {
+                    if (!isEditorCreated) {
+                        console.log('>>> Creating editor for the first time...')
+                        isEditorCreated = true
+                        createEditor()
+                    }
+                }, 100)
             } else if (status === 'disconnected') {
                 console.log('>>> Disconnected')
                 updateConnectionStatus('disconnected')
@@ -119,9 +140,9 @@ async function initEditor(documentName) {
 function createEditor() {
     console.log('Creating Tiptap editor...')
     
-    // 确保 awareness 已初始化
-    if (!provider || !provider.awareness) {
-        console.warn('Provider or awareness not ready yet, waiting...')
+    // 确保 provider、awareness 和 document 都已初始化
+    if (!provider || !provider.awareness || !provider.document) {
+        console.warn('Provider, awareness or document not ready yet, waiting...')
         setTimeout(createEditor, 100)
         return
     }
@@ -131,52 +152,73 @@ function createEditor() {
     console.log('Provider document:', !!provider.document)
     console.log('Are they the same?', provider.document === ydoc)
     
-    editor = new Editor({
-        element: document.querySelector('#editor'),
-        extensions: [
-            StarterKit.configure({
-                // Collaboration 扩展自带历史支持，所以禁用 StarterKit 的历史
-                history: false
-            }),
-            Collaboration.configure({
-                document: ydoc,
-                field: 'content'
-            })
-            // 暂时禁用 CollaborationCursor，先让编辑器正常工作
-            // CollaborationCursor.configure({
-            //     provider: provider,
-            //     user: {
-            //         name: userName,
-            //         color: userColor
-            //     }
-            // })
-        ],
-        onCreate: () => {
-            console.log('Editor created successfully')
-        },
-        onUpdate: ({ editor }) => {
-            const content = editor.getHTML()
-            console.log('✏️ Editor updated, content length:', content.length)
-            console.log('Content preview:', content.substring(0, 100))
-        },
-        onTransaction: ({ transaction }) => {
-            if (transaction.docChanged) {
-                console.log('📝 Document changed in transaction')
+    try {
+        editor = new Editor({
+            element: document.querySelector('#editor'),
+            extensions: [
+                StarterKit.configure({
+                    // Collaboration 扩展自带历史支持，所以禁用 StarterKit 的历史
+                    history: false
+                }),
+                TextStyle,
+                Color.configure({
+                    types: ['textStyle']
+                }),
+                Collaboration.configure({
+                    document: provider.document,
+                    field: 'content'
+                })
+                // 暂时禁用 CollaborationCursor，等待版本兼容问题解决
+                // CollaborationCursor.configure({
+                //     provider: provider,
+                //     user: {
+                //         name: userName,
+                //         color: userColor
+                //     }
+                // })
+            ],
+            onCreate: () => {
+                console.log('Editor created successfully')
+                console.log('User color:', userColor)
+                // 设置默认文本颜色为用户颜色
+                editor.chain().focus().setColor(userColor).run()
+            },
+            onUpdate: ({ editor }) => {
+                const content = editor.getHTML()
+                console.log('✏️ Editor updated, content length:', content.length)
+                console.log('Content preview:', content.substring(0, 100))
+            },
+            onSelectionUpdate: ({ editor }) => {
+                // 当选择（光标）位置更新时，确保颜色是用户颜色
+                setTimeout(() => {
+                    if (editor && !editor.isDestroyed) {
+                        editor.commands.setColor(userColor)
+                    }
+                }, 0)
+            },
+            onTransaction: ({ transaction }) => {
+                if (transaction.docChanged) {
+                    console.log('📝 Document changed in transaction')
+                }
+            },
+            editorProps: {
+                attributes: {
+                    class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none'
+                }
             }
-        },
-        editorProps: {
-            attributes: {
-                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none'
+        })
+        
+        setTimeout(() => {
+            if (editor) {
+                editor.commands.focus()
+                console.log('Editor focused')
             }
-        }
-    })
-    
-    setTimeout(() => {
-        if (editor) {
-            editor.commands.focus()
-            console.log('Editor focused')
-        }
-    }, 100)
+        }, 100)
+    } catch (error) {
+        console.error('Error creating editor:', error)
+        // 如果创建失败，等待后重试
+        setTimeout(createEditor, 200)
+    }
 }
 
 const connectionStatus = document.createElement('div')
@@ -204,6 +246,7 @@ userInfo.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'
 userInfo.innerHTML = `<div style="display: flex; align-items: center; gap: 8px;">
     <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${userColor};"></div>
     <span>${userName}</span>
+    <span style="color: #999; font-size: 11px;">（你的专属颜色）</span>
 </div>`
 document.body.appendChild(userInfo)
 
@@ -342,6 +385,22 @@ function setupEventListeners() {
             }, 2000)
         } else {
             alert('请先打开一个文档')
+        }
+    })
+    
+    // 文本颜色选择器
+    document.getElementById('text-color').addEventListener('input', (e) => {
+        if (editor) {
+            const color = e.target.value
+            editor.chain().focus().setColor(color).run()
+        }
+    })
+    
+    // 清除文本颜色
+    document.getElementById('clear-color').addEventListener('click', () => {
+        if (editor) {
+            editor.chain().focus().unsetColor().run()
+            document.getElementById('text-color').value = '#000000'
         }
     })
     
