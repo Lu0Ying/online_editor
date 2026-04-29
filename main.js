@@ -5,7 +5,7 @@ import Color from '@tiptap/extension-color'
 import { TextStyle } from '@tiptap/extension-text-style'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
-import { clickEffect, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement } from './beautify.js'
+import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement } from './beautify.js'
 
 const userId = '用户' + Math.floor(Math.random() * 1000)
 const userColor = generateRandomColor()
@@ -211,7 +211,8 @@ const connectionStatus = createConnectionStatusPanel()
 setConnectionStatusElement(connectionStatus)
 createUserInfoPanel(userName, userColor)
 
-// 调用点击特效
+// 调用粒子背景效果和点击特效
+createParticleBackground()
 clickEffect()
 
 
