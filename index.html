@@ -11,8 +11,8 @@
 <div class="document-manager">
     <div class="input-group">
         <input type="text" id="document-name" placeholder="输入文档名称（例如：项目计划）" />
-        <button id="create-doc">创建新文档</button>
-        <button id="open-doc">打开文档</button>
+        <button id="create-doc" class="btn btn-primary">创建新文档</button>
+        <button id="open-doc" class="btn btn-secondary">打开文档</button>
     </div>
     <div id="document-list">
         <h3>最近文档</h3>
@@ -24,7 +24,7 @@
     <div class="editor-header">
         <span id="current-doc-name">当前文档: my-document</span>
         <div class="header-actions">
-            <button id="save-btn" class="save-button">💾 保存</button>
+            <button id="save-btn" class="btn btn-success">保存</button>
             <span class="collaboration-info">多人实时协作 • 自动保存</span>
         </div>
     </div>
@@ -32,7 +32,7 @@
         <div class="color-picker-group">
             <label for="text-color">文本颜色：</label>
             <input type="color" id="text-color" value="#000000" title="选择文本颜色" />
-            <button id="clear-color" class="toolbar-button">清除颜色</button>
+            <button id="clear-color" class="btn btn-secondary">清除颜色</button>
         </div>
     </div>
     <div id="editor" class="editor-box"></div>
