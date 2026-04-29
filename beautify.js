@@ -1,3 +1,116 @@
+// 粒子连线背景效果
+export function createParticleBackground() {
+    function getAttribute(el, attr, defaultValue) {
+        return el.getAttribute(attr) || defaultValue;
+    }
+
+    function getElementsByTagName(tag) {
+        return document.getElementsByTagName(tag);
+    }
+
+    let canvasWidth, canvasHeight;
+    let particles;
+    const canvas = document.createElement("canvas");
+    const config = {
+        zIndex: -1,
+        opacity: 1,
+        color: "255, 255, 255",
+        count: 99
+    };
+    const canvasId = "particle_bg";
+    const ctx = canvas.getContext("2d");
+    const requestAnimFrame = window.requestAnimationFrame || 
+                           window.webkitRequestAnimationFrame || 
+                           window.mozRequestAnimationFrame || 
+                           window.oRequestAnimationFrame || 
+                           window.msRequestAnimationFrame || 
+                           function(callback) {
+                               window.setTimeout(callback, 1000 / 45);
+                           };
+    const random = Math.random;
+    const mouse = { x: null, y: null, max: 20000 };
+
+    canvas.id = canvasId;
+    canvas.style.cssText = `position:fixed;top:0;left:0;z-index:${config.zIndex};opacity:${config.opacity};`;
+    getElementsByTagName("body")[0].appendChild(canvas);
+
+    function updateSize() {
+        canvasWidth = canvas.width = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+        canvasHeight = canvas.height = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        
+        let particle, otherParticle, dx, dy, distance;
+        particles.forEach(function(p, index) {
+            p.x += p.vx;
+            p.y += p.vy;
+            
+            if (p.x > canvasWidth || p.x < 0) p.vx *= -1;
+            if (p.y > canvasHeight || p.y < 0) p.vy *= -1;
+            
+            ctx.fillStyle = `rgba(${config.color}, 1)`;
+            ctx.fillRect(p.x - 0.5, p.y - 0.5, 1, 1);
+            
+            for (let i = index + 1; i < particles.length; i++) {
+                otherParticle = particles[i];
+                if (otherParticle.x !== null && otherParticle.y !== null) {
+                    dx = p.x - otherParticle.x;
+                    dy = p.y - otherParticle.y;
+                    distance = dx * dx + dy * dy;
+                    
+                    if (distance < otherParticle.max) {
+                        if (otherParticle === mouse && distance >= otherParticle.max / 2) {
+                            p.x -= 0.03 * dx;
+                            p.y -= 0.03 * dy;
+                        }
+                        
+                        const opacity = (otherParticle.max - distance) / otherParticle.max;
+                        ctx.beginPath();
+                        ctx.lineWidth = opacity / 2;
+                        ctx.strokeStyle = `rgba(${config.color}, ${opacity + 0.2})`;
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(otherParticle.x, otherParticle.y);
+                        ctx.stroke();
+                    }
+                }
+            }
+        });
+        
+        requestAnimFrame(draw);
+    }
+
+    updateSize();
+    window.addEventListener('resize', updateSize, false);
+    
+    window.addEventListener('mousemove', function(e) {
+        e = e || window.event;
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+    }, false);
+    
+    window.addEventListener('mouseout', function() {
+        mouse.x = null;
+        mouse.y = null;
+    }, false);
+
+    particles = [];
+    for (let i = 0; i < config.count; i++) {
+        let x = random() * canvasWidth;
+        let y = random() * canvasHeight;
+        let vx = 2 * random() - 1;
+        let vy = 2 * random() - 1;
+        particles.push({ x, y, vx, vy, max: 6000 });
+    }
+    
+    particles.push(mouse);
+    
+    setTimeout(function() {
+        draw();
+    }, 100);
+}
+
 // 点击特效
 export function clickEffect() {
     let balls = [];
