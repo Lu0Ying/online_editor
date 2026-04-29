@@ -1,28 +1,11 @@
 import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
 import Color from '@tiptap/extension-color'
 import { TextStyle } from '@tiptap/extension-text-style'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
-
-// 生成随机颜色
-function generateRandomColor() {
-    const colors = [
-        '#FF6B6B', // 红色
-        '#4ECDC4', // 青色
-        '#45B7D1', // 蓝色
-        '#96CEB4', // 绿色
-        '#FFEAA7', // 黄色
-        '#DDA0DD', // 紫色
-        '#98D8C8', // 薄荷绿
-        '#F7DC6F', // 金黄色
-        '#BB8FCE', // 淡紫色
-        '#85C1E9'  // 天蓝色
-    ]
-    return colors[Math.floor(Math.random() * colors.length)]
-}
+import { clickEffect, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement } from './beautify.js'
 
 const userId = '用户' + Math.floor(Math.random() * 1000)
 const userColor = generateRandomColor()
@@ -36,7 +19,7 @@ const apiUrl = `http://${serverHost}:1236`
 let editor = null
 let provider = null
 let ydoc = null
-let currentDocumentName = 'my-document'
+let currentDocumentName = 'test_document'  // 默认文档名称
 let saveTimeout = null  // 用于前端防抖保存提示
 let isEditorCreated = false  // 防止重复创建编辑器
 
@@ -221,69 +204,17 @@ function createEditor() {
     }
 }
 
-const connectionStatus = document.createElement('div')
-connectionStatus.style.position = 'fixed'
-connectionStatus.style.bottom = '10px'
-connectionStatus.style.right = '10px'
-connectionStatus.style.padding = '10px 15px'
-connectionStatus.style.borderRadius = '6px'
-connectionStatus.style.fontSize = '13px'
-connectionStatus.style.fontWeight = '500'
-connectionStatus.style.zIndex = '9999'
-connectionStatus.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'
-document.body.appendChild(connectionStatus)
 
-const userInfo = document.createElement('div')
-userInfo.style.position = 'fixed'
-userInfo.style.bottom = '55px'
-userInfo.style.right = '10px'
-userInfo.style.padding = '10px 15px'
-userInfo.style.backgroundColor = '#fff'
-userInfo.style.borderRadius = '6px'
-userInfo.style.fontSize = '13px'
-userInfo.style.zIndex = '9999'
-userInfo.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'
-userInfo.innerHTML = `<div style="display: flex; align-items: center; gap: 8px;">
-    <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${userColor};"></div>
-    <span>${userName}</span>
-    <span style="color: #999; font-size: 11px;">（你的专属颜色）</span>
-</div>`
-document.body.appendChild(userInfo)
 
-const connectionStatusConfig = {
-    connected: {
-        text: '● 已连接 - 实时协作中',
-        bgColor: '#d4edda',
-        color: '#155724'
-    },
-    saving: {
-        text: '◐ 正在保存...',
-        bgColor: '#fff3cd',
-        color: '#856404'
-    },
-    connecting: {
-        text: '◐ 连接中...',
-        bgColor: '#fff3cd',
-        color: '#856404'
-    },
-    disconnected: {
-        text: '○ 未连接',
-        bgColor: '#f8d7da',
-        color: '#721c24'
-    },
-    error: {
-        text: '✕ 连接错误',
-        bgColor: '#f8d7da',
-        color: '#721c24'
-    }
-}
+// 创建UI面板元素
+const connectionStatus = createConnectionStatusPanel()
+setConnectionStatusElement(connectionStatus)
+createUserInfoPanel(userName, userColor)
 
-function updateConnectionStatus(status) {
-    const config = connectionStatusConfig[status] || connectionStatusConfig.disconnected
-    connectionStatus.textContent = config.text
-    connectionStatus.style.backgroundColor = config.bgColor
-    connectionStatus.style.color = config.color
-}
+// 调用点击特效
+clickEffect()
+
+
 
 function updateRecentDocuments(documentName) {
     let recentDocs = JSON.parse(localStorage.getItem('recentDocuments') || '[]')
@@ -307,6 +238,49 @@ async function loadDocumentList() {
     }
 }
 
+async function deleteDocument(documentName) {
+    try {
+        const response = await fetch(`${apiUrl}/api/documents?name=${encodeURIComponent(documentName)}`, {
+            method: 'DELETE'
+        })
+        
+        if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(errorData.error || 'Failed to delete document')
+        }
+        
+        console.log('Document deleted successfully:', documentName)
+        
+        // 如果删除的是当前打开的文档，重置编辑器
+        if (currentDocumentName === documentName && editor) {
+            editor.destroy()
+            editor = null
+            if (provider) {
+                provider.destroy()
+                provider = null
+            }
+            if (ydoc) {
+                ydoc.destroy()
+                ydoc = null
+            }
+            currentDocumentName = 'test_document'
+            const docNameElement = document.getElementById('current-doc-name')
+            if (docNameElement) {
+                docNameElement.textContent = '当前文档: test_document'
+            }
+        }
+        
+        // 刷新文档列表
+        const serverDocs = await loadDocumentList()
+        renderRecentDocuments(serverDocs)
+        
+        alert(`文档 "${documentName}" 已删除`)
+    } catch (error) {
+        console.error('Error deleting document:', error)
+        alert(`删除失败: ${error.message}`)
+    }
+}
+
 async function renderRecentDocuments(docs) {
     const list = document.getElementById('recent-docs')
     list.innerHTML = ''
@@ -326,17 +300,34 @@ async function renderRecentDocuments(docs) {
         li.style.justifyContent = 'space-between'
         li.style.alignItems = 'center'
         
+        const buttonGroup = document.createElement('div')
+        buttonGroup.style.display = 'flex'
+        buttonGroup.style.gap = '8px'
+        
         const openBtn = document.createElement('button')
         openBtn.textContent = '打开'
-        openBtn.style.padding = '4px 12px'
-        openBtn.style.marginLeft = '10px'
+        openBtn.className = 'btn-sm btn-sm-primary'
         openBtn.style.cursor = 'pointer'
         openBtn.addEventListener('click', async (e) => {
             e.stopPropagation()
             await initEditor(doc)
         })
         
-        li.appendChild(openBtn)
+        const deleteBtn = document.createElement('button')
+        deleteBtn.textContent = '删除'
+        deleteBtn.className = 'btn-sm btn-sm-danger'
+        deleteBtn.style.cursor = 'pointer'
+        deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation()
+            if (confirm(`确定要删除文档 "${doc}" 吗？此操作不可恢复！`)) {
+                await deleteDocument(doc)
+            }
+        })
+        
+        buttonGroup.appendChild(openBtn)
+        buttonGroup.appendChild(deleteBtn)
+        li.appendChild(buttonGroup)
+        
         li.addEventListener('click', async () => {
             await initEditor(doc)
         })

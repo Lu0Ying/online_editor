@@ -96,7 +96,7 @@ async function startServer() {
             
             // 设置 CORS 头
             res.setHeader('Access-Control-Allow-Origin', '*')
-            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
             
             // 处理 OPTIONS 预检请求
@@ -106,23 +106,56 @@ async function startServer() {
                 return
             }
             
-            // 处理 /api/documents 请求 - 获取文档列表
-            if (req.url === '/api/documents' && req.method === 'GET') {
-                try {
-                    const files = await fs.readdir(onlinetextDir)
-                    const documents = files
-                        .filter(file => file.endsWith('.json'))
-                        .map(file => file.replace('.json', ''))
-                    
-                    console.log('Returning documents:', documents)
-                    res.writeHead(200, { 'Content-Type': 'application/json' })
-                    res.end(JSON.stringify({ documents }))
-                } catch (error) {
-                    console.error('Error listing documents:', error)
-                    res.writeHead(500, { 'Content-Type': 'application/json' })
-                    res.end(JSON.stringify({ error: 'Failed to list documents' }))
+            // 处理 /api/documents 请求 - 获取文档列表或删除文档
+            if (req.url.startsWith('/api/documents')) {
+                // GET - 获取文档列表
+                if (req.method === 'GET') {
+                    try {
+                        const files = await fs.readdir(onlinetextDir)
+                        const documents = files
+                            .filter(file => file.endsWith('.json'))
+                            .map(file => file.replace('.json', ''))
+                        
+                        console.log('Returning documents:', documents)
+                        res.writeHead(200, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ documents }))
+                    } catch (error) {
+                        console.error('Error listing documents:', error)
+                        res.writeHead(500, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ error: 'Failed to list documents' }))
+                    }
+                    return
                 }
-                return
+                
+                // DELETE - 删除文档
+                if (req.method === 'DELETE') {
+                    const url = new URL(req.url, `http://${req.headers.host}`)
+                    const documentName = url.searchParams.get('name')
+                    
+                    if (!documentName) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ error: 'Document name is required' }))
+                        return
+                    }
+                    
+                    try {
+                        const filePath = path.join(onlinetextDir, `${documentName}.json`)
+                        await fs.unlink(filePath)
+                        console.log('🗑️ Document deleted:', documentName)
+                        res.writeHead(200, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ success: true, message: 'Document deleted successfully' }))
+                    } catch (error) {
+                        if (error.code === 'ENOENT') {
+                            res.writeHead(404, { 'Content-Type': 'application/json' })
+                            res.end(JSON.stringify({ error: 'Document not found' }))
+                        } else {
+                            console.error('Error deleting document:', error)
+                            res.writeHead(500, { 'Content-Type': 'application/json' })
+                            res.end(JSON.stringify({ error: 'Failed to delete document' }))
+                        }
+                    }
+                    return
+                }
             }
             
             // 其他请求返回 404
