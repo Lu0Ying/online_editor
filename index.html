@@ -6,6 +6,9 @@
     <link rel="stylesheet" href="css/index.css" />
 </head>
 <body>
+<!-- 系统消息通知容器 -->
+<div id="system-notifications" class="system-notifications"></div>
+
 <h1>实时协作文档编辑器</h1>
 
 <div class="document-manager">
@@ -13,6 +16,17 @@
         <input type="text" id="document-name" placeholder="输入文档名称（例如：项目计划）" />
         <button id="create-doc" class="btn btn-primary">创建新文档</button>
         <button id="open-doc" class="btn btn-secondary">打开文档</button>
+    </div>
+    <div class="join-section">
+        <h3>加入已有文档</h3>
+        <div class="input-group">
+            <input type="text" id="document-id" placeholder="输入文档编号或粘贴文档链接" />
+            <button id="join-doc" class="btn btn-accent">加入文档</button>
+        </div>
+        <div class="share-info">
+            <p>分享此文档给他人：<span id="current-doc-url">无</span></p>
+            <button id="copy-link" class="btn btn-sm btn-secondary">复制链接</button>
+        </div>
     </div>
     <div id="document-list">
         <h3>最近文档</h3>

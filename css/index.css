@@ -5,6 +5,120 @@
     box-sizing: border-box;
 }
 
+/* 系统消息通知容器 */
+.system-notifications {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
+    pointer-events: none;
+}
+
+/* 单条系统消息 */
+.system-notification {
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    border-left: 4px solid var(--primary-500);
+    animation: slideInRight 0.3s ease-out;
+    pointer-events: auto;
+    transition: all 0.3s ease;
+}
+
+/* 消息滑入动画 */
+@keyframes slideInRight {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* 消息滑出动画 */
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+}
+
+/* 消息消失时的类 */
+.system-notification.hiding {
+    animation: slideOutRight 0.3s ease-in forwards;
+}
+
+/* 消息标题 */
+.system-notification-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1e293b;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 消息内容 */
+.system-notification-content {
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+/* 不同类型的消息样式 */
+.system-notification.user-join {
+    border-left-color: var(--success-500);
+}
+
+.system-notification.user-join .system-notification-title {
+    color: var(--success-600);
+}
+
+.system-notification.user-leave {
+    border-left-color: #ef4444;
+}
+
+.system-notification.user-leave .system-notification-title {
+    color: #dc2626;
+}
+
+.system-notification.document-save {
+    border-left-color: var(--primary-500);
+}
+
+.system-notification.document-save .system-notification-title {
+    color: var(--primary-600);
+}
+
+.system-notification.info {
+    border-left-color: #3b82f6;
+}
+
+.system-notification.info .system-notification-title {
+    color: #2563eb;
+}
+
+.system-notification.warning {
+    border-left-color: #f59e0b;
+}
+
+.system-notification.warning .system-notification-title {
+    color: #d97706;
+}
+
 :root {
     /* 主色调 - 清新的青蓝色系 */
     --primary-50: #f0f9ff;
@@ -153,6 +267,16 @@ h1 {
     background: white;
     border-color: var(--primary-400);
     box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
+}
+
+.btn-accent {
+    background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-700) 100%);
+    color: white;
+    box-shadow: 0 4px 20px rgba(249, 115, 22, 0.4);
+}
+
+.btn-accent:hover {
+    box-shadow: 0 12px 30px rgba(249, 115, 22, 0.5);
 }
 
 /* 小按钮样式 - 用于文档列表 */
@@ -311,6 +435,57 @@ h1 {
 
 #recent-docs li:last-child {
     margin-bottom: 0;
+}
+
+/* 加入文档区域 */
+.join-section {
+    margin-top: 30px;
+    padding-top: 28px;
+    border-top: 2px solid #f3f0ff;
+}
+
+.join-section h3 {
+    margin: 0 0 20px 0;
+    color: #1e293b;
+    font-size: 17px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.join-section h3::before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: linear-gradient(180deg, var(--accent-500) 0%, var(--primary-500) 100%);
+    border-radius: 2px;
+}
+
+.share-info {
+    margin-top: 20px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 12px;
+    border: 1px dashed #ddd6fe;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.share-info p {
+    margin: 0;
+    font-size: 14px;
+    color: #64748b;
+    flex: 1;
+    min-width: 200px;
+}
+
+#current-doc-url {
+    color: var(--primary-600);
+    font-weight: 500;
+    word-break: break-all;
 }
 
 /* 编辑器容器 */
