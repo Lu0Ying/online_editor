@@ -6,7 +6,7 @@ import Color from '@tiptap/extension-color'
 import { TextStyle } from '@tiptap/extension-text-style'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
-import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement } from './beautify.js'
+import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement, updateOnlineUsersList } from './beautify.js'
 
 const userId = '用户' + Math.floor(Math.random() * 1000)
 const userColor = generateRandomColor()
@@ -111,6 +111,15 @@ async function initEditor(documentName) {
         },
         onDisconnect: () => {
             console.log('>>> WebSocket disconnected')
+        },
+        onAwarenessUpdate: ({ states }) => {
+            // 过滤掉没有用户信息的状态（例如只包含光标位置但没有用户名的状态）
+            const users = Array.from(states.values())
+                .map(state => state.user)
+                .filter(user => user && user.name)
+            
+            console.log('>>> Online users updated:', users)
+            updateOnlineUsersList(users)
         }
     })
     
@@ -443,6 +452,54 @@ function setupEventListeners() {
                 e.target.value = ''
             }
         }
+    })
+    
+    // 导出文档功能
+    document.getElementById('export-btn').addEventListener('click', () => {
+        if (!editor) {
+            alert('请先打开一个文档')
+            return
+        }
+        
+        const exportFormat = document.getElementById('export-format').value
+        let content, filename, mimeType
+        
+        if (exportFormat === 'html') {
+            content = editor.getHTML()
+            filename = `${currentDocumentName}.html`
+            mimeType = 'text/html'
+        } else if (exportFormat === 'text') {
+            content = editor.getText()
+            filename = `${currentDocumentName}.txt`
+            mimeType = 'text/plain'
+        } else if (exportFormat === 'json') {
+            // 导出 Yjs 文档状态
+            const state = Y.encodeStateAsUpdate(ydoc)
+            // 使用浏览器兼容的方式转换为 base64
+            const binaryString = Array.from(state, byte => String.fromCharCode(byte)).join('')
+            const base64State = btoa(binaryString)
+            content = JSON.stringify({
+                type: 'yjs',
+                data: base64State,
+                exportedAt: new Date().toISOString(),
+                documentName: currentDocumentName
+            }, null, 2)
+            filename = `${currentDocumentName}.json`
+            mimeType = 'application/json'
+        }
+        
+        // 创建 Blob 并下载
+        const blob = new Blob([content], { type: mimeType })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        
+        console.log(`✅ Document exported as ${filename}`)
     })
 }
 
