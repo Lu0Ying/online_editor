@@ -201,6 +201,12 @@ async function startServer() {
             
             onDisconnect(data) {
                 console.log(`🔌 Client disconnected from "${data.documentName}"`)
+            },
+
+            async onAwarenessUpdate({ documentName, awareness, states }) {
+                // 当感知状态更新时，可以记录日志或进行其他处理
+                const userCount = states.length
+                console.log(`👥 Document "${documentName}" has ${userCount} online users`)
             }
         })
         

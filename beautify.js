@@ -345,3 +345,41 @@ export function createConnectionStatusPanel() {
     document.body.appendChild(connectionStatus)
     return connectionStatus
 }
+
+// 更新在线用户列表显示
+export function updateOnlineUsersList(users) {
+    const usersListElement = document.getElementById('online-users-list')
+    if (!usersListElement) return
+
+    usersListElement.innerHTML = ''
+    
+    if (!users || users.length === 0) {
+        usersListElement.innerHTML = '<span style="color: #999;">暂无其他用户</span>'
+        return
+    }
+
+    users.forEach(user => {
+        const userBadge = document.createElement('div')
+        userBadge.style.display = 'flex'
+        userBadge.style.alignItems = 'center'
+        userBadge.style.gap = '5px'
+        userBadge.style.padding = '4px 8px'
+        userBadge.style.backgroundColor = user.color + '20' // 添加透明度
+        userBadge.style.borderRadius = '12px'
+        userBadge.style.border = `1px solid ${user.color}`
+        userBadge.style.fontSize = '12px'
+        
+        const colorDot = document.createElement('div')
+        colorDot.style.width = '8px'
+        colorDot.style.height = '8px'
+        colorDot.style.borderRadius = '50%'
+        colorDot.style.backgroundColor = user.color
+        
+        const userNameSpan = document.createElement('span')
+        userNameSpan.textContent = user.name
+        
+        userBadge.appendChild(colorDot)
+        userBadge.appendChild(userNameSpan)
+        usersListElement.appendChild(userBadge)
+    })
+}
