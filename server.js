@@ -35,6 +35,11 @@ async function storeYjsDocument(documentName, ydoc) {
     const filePath = path.join(onlinetextDir, `${documentName}.json`)
     
     try {
+        const activeUserIds = gatherActiveUserIds(ydoc)
+        console.log(`Active user IDs for "${documentName}":`, Array.from(activeUserIds))
+        if (removeInactiveUserHighlights(ydoc, activeUserIds)) {
+            console.log(`🔧 Cleaned up stale highlight wrappers before saving document: ${documentName}`)
+        }
         const state = Y.encodeStateAsUpdate(ydoc)
         const base64State = Buffer.from(state).toString('base64')
         
@@ -83,6 +88,62 @@ async function loadYjsDocument(documentName) {
             return new Y.Doc()
         }
     }
+}
+
+function gatherActiveUserIds(document) {
+    const activeUserIds = new Set()
+    try {
+        const awarenessStates = document.awareness.getStates()
+        for (const state of awarenessStates.values()) {
+            if (state && state.user && state.user.id) {
+                activeUserIds.add(state.user.id)
+            }
+        }
+    } catch (error) {
+        console.error('Error gathering active user ids:', error)
+    }
+    return activeUserIds
+}
+
+function removeInactiveUserHighlights(document, activeUserIds) {
+    const xmlFragment = document.get('content', Y.XmlFragment)
+    if (!xmlFragment) {
+        return false
+    }
+
+    let removed = false
+
+    function traverse(element) {
+        const children = element.toArray()
+        for (const child of children) {
+            if (child instanceof Y.XmlElement) {
+                traverse(child)
+                const attrs = child.getAttributes()
+                if (attrs['data-user-highlight'] !== undefined) {
+                    const highlightUserId = attrs['data-user-id']
+                    if (highlightUserId && !activeUserIds.has(highlightUserId)) {
+                        const parent = child.parent
+                        if (parent) {
+                            const nestedChildren = child.toArray()
+                            const parentArray = parent.toArray()
+                            const idx = parentArray.indexOf(child)
+                            child.delete()
+                            if (nestedChildren.length > 0) {
+                                parent.insert(idx, nestedChildren)
+                            }
+                            removed = true
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    document.transact(() => {
+        traverse(xmlFragment)
+    })
+
+    return removed
 }
 
 async function startServer() {
@@ -179,6 +240,7 @@ async function startServer() {
             
             async onStoreDocument({ documentName, document }) {
                 console.log('💾 Saving document:', documentName)
+
                 try {
                     await storeYjsDocument(documentName, document)
                     console.log('✅ Document saved successfully:', documentName)
@@ -201,6 +263,15 @@ async function startServer() {
             
             onDisconnect(data) {
                 console.log(`🔌 Client disconnected from "${data.documentName}"`)
+                try {
+                    const activeUserIds = gatherActiveUserIds(data.document)
+                    console.log(`Active user IDs for "${data.documentName}":`, Array.from(activeUserIds))
+                    if (removeInactiveUserHighlights(data.document, activeUserIds)) {
+                        console.log(`🔧 Cleaned up stale highlight wrappers for document: ${data.documentName}`)
+                    }
+                } catch (error) {
+                    console.error('Error cleaning up highlight wrappers on disconnect:', error)
+                }
             },
 
             async onAwarenessUpdate({ documentName, awareness, states }) {
