@@ -37,6 +37,7 @@
         transform: translateX(400px);
         opacity: 0;
     }
+
     to {
         transform: translateX(0);
         opacity: 1;
@@ -49,6 +50,7 @@
         transform: translateX(0);
         opacity: 1;
     }
+
     to {
         transform: translateX(400px);
         opacity: 0;
@@ -119,6 +121,12 @@
     color: #d97706;
 }
 
+.user-highlight {
+    border-radius: 3px;
+    padding: 0 2px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
 :root {
     /* 主色调 - 清新的青蓝色系 */
     --primary-50: #f0f9ff;
@@ -131,7 +139,7 @@
     --primary-700: #0369a1;
     --primary-800: #075985;
     --primary-900: #0c4a6e;
-    
+
     /* 辅助色 - 活力的橙粉色系 */
     --accent-50: #fff7ed;
     --accent-100: #ffedd5;
@@ -143,7 +151,7 @@
     --accent-700: #c2410c;
     --accent-800: #9a3412;
     --accent-900: #7c2d12;
-    
+
     /* 成功色 - 清新绿色系 */
     --success-50: #f0fdf4;
     --success-100: #dcfce7;
@@ -155,17 +163,17 @@
     --success-700: #15803d;
     --success-800: #166534;
     --success-900: #14532d;
-    
+
     /* 背景渐变 - 清新的青蓝色调 */
     --bg-gradient: linear-gradient(135deg, #0ea5e9 0%, #0284c7 30%, #06b6d4 60%, #22d3ee 100%);
     --card-gradient: linear-gradient(145deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.95) 100%);
-    
+
     /* 阴影 */
     --shadow-sm: 0 2px 8px rgba(14, 165, 233, 0.08);
     --shadow-md: 0 4px 16px rgba(14, 165, 233, 0.15);
     --shadow-lg: 0 8px 32px rgba(14, 165, 233, 0.22);
     --shadow-xl: 0 12px 48px rgba(14, 165, 233, 0.3);
-    
+
     /* 过渡 */
     --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -539,13 +547,16 @@ h1 {
 }
 
 @keyframes pulse {
-    0%, 100% { 
-        opacity: 1; 
+
+    0%,
+    100% {
+        opacity: 1;
         transform: scale(1);
         box-shadow: 0 0 12px rgba(34, 197, 94, 0.5);
     }
-    50% { 
-        opacity: 0.6; 
+
+    50% {
+        opacity: 0.6;
         transform: scale(1.1);
         box-shadow: 0 0 20px rgba(34, 197, 94, 0.8);
     }
@@ -612,7 +623,7 @@ h1 {
     position: relative;
 }
 
-.ProseMirror > * + * {
+.ProseMirror>*+* {
     margin-top: 0.9em;
 }
 
@@ -672,7 +683,7 @@ h1 {
     padding: 4px 12px;
     border-radius: 5px 5px 5px 0;
     white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     transform: translateY(0);
     transition: opacity 0.2s;
 }

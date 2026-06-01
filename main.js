@@ -1,16 +1,62 @@
-import { Editor } from '@tiptap/core'
+import { Editor, Mark } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import Color from '@tiptap/extension-color'
-import { TextStyle } from '@tiptap/extension-text-style'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement, updateOnlineUsersList } from './beautify.js'
 
-const userId = '用户' + Math.floor(Math.random() * 1000)
+const userId = `user-${Math.floor(Math.random() * 100000)}`
 const userColor = generateRandomColor()
 const userName = userId
+
+const UserHighlight = Mark.create({
+    name: 'userHighlight',
+    inclusive: true,
+    addAttributes() {
+        return {
+            userId: {
+                default: null,
+            },
+            userName: {
+                default: null,
+            },
+            color: {
+                default: null,
+            }
+        }
+    },
+    parseHTML() {
+        return [
+            {
+                tag: 'span[data-user-highlight]'
+            }
+        ]
+    },
+    renderHTML({ HTMLAttributes }) {
+        const { userId, userName, color, ...rest } = HTMLAttributes
+        const styles = []
+
+        if (color) {
+            styles.push(`background-color: ${color}`)
+            styles.push('color: inherit')
+        }
+
+        return ['span', {
+            ...rest,
+            'data-user-highlight': userId || '',
+            'data-user-id': userId || '',
+            'data-user-name': userName || '',
+            class: 'user-highlight',
+            style: styles.join('; ')
+        }, 0]
+    },
+    addCommands() {
+        return {
+            setUserHighlight: attrs => ({ commands }) => commands.setMark(this.name, attrs),
+            unsetUserHighlight: () => ({ commands }) => commands.unsetMark(this.name)
+        }
+    }
+})
 
 // 系统消息通知函数
 function showSystemNotification(title, message, type = 'info', duration = 3000) {
@@ -266,6 +312,7 @@ function createEditor() {
     if (provider.awareness) {
         console.log('Setting local state for awareness')
         provider.awareness.setLocalStateField('user', {
+            id: userId,
             name: userName,
             color: userColor
         })
@@ -279,50 +326,21 @@ function createEditor() {
                     // Collaboration 扩展自带历史支持，所以禁用 StarterKit 的历史
                     history: false
                 }),
-                TextStyle,
-                Color.configure({
-                    types: ['textStyle']
-                }),
+                UserHighlight,
                 Collaboration.configure({
                     document: provider.document,
                     field: 'content'
                 })
                 // CollaborationCursor 与当前版本不兼容，已禁用以避免文字消失的问题
-                // 光标颜色通过 onSelectionUpdate 和 setColor 来实现
-                // CollaborationCursor.configure({
-                //     provider: provider,
-                //     user: {
-                //         name: userName,
-                //         color: userColor
-                //     }
-                // })
             ],
             onCreate: () => {
                 console.log('Editor created successfully')
                 console.log('User color:', userColor)
-                // 设置初始颜色为用户颜色
-                editor.chain().focus().setColor(userColor).run()
             },
             onUpdate: ({ editor }) => {
                 const content = editor.getHTML()
                 console.log('✏️ Editor updated, content length:', content.length)
                 console.log('Content preview:', content.substring(0, 100))
-            },
-            onSelectionUpdate: ({ editor }) => {
-                // 当选择（光标）位置更新时，恢复用户颜色
-                // 这样确保在新位置输入时使用用户自己的颜色
-                // 但如果正在输入法组合输入（如拼音），则不改变颜色
-                if (!isComposing) {
-                    setTimeout(() => {
-                        if (editor && !editor.isDestroyed) {
-                            // 只在没有选中文本时才设置颜色，避免影响已选中的文本
-                            const { from, to } = editor.state.selection
-                            if (from === to) {
-                                editor.commands.setColor(userColor)
-                            }
-                        }
-                    }, 0)
-                }
             },
             onTransaction: ({ transaction }) => {
                 if (transaction.docChanged) {
@@ -331,7 +349,30 @@ function createEditor() {
             },
             editorProps: {
                 handleDOMEvents: {
-                    // 处理输入法组合事件，避免拼音输入时被分割
+                        beforeinput: (view, event) => {
+                        if (!editor || editor.isDestroyed) {
+                            return false
+                        }
+
+                        const insertTypes = [
+                            'insertText',
+                            'insertParagraph',
+                            'insertLineBreak',
+                            'insertCompositionText',
+                            'insertFromPaste',
+                            'insertFromDrop'
+                        ]
+
+                        if (event.inputType && insertTypes.includes(event.inputType)) {
+                            editor.commands.setUserHighlight({
+                                userId,
+                                userName,
+                                color: userColor
+                            })
+                        }
+
+                        return false
+                    },
                     compositionstart: () => {
                         // 开始组合输入（如拼音输入）
                         isComposing = true
@@ -342,10 +383,6 @@ function createEditor() {
                         // 结束组合输入，确保完整文本被插入
                         isComposing = false
                         console.log('Composition ended')
-                        // 组合结束后，恢复用户颜色
-                        if (editor && !editor.isDestroyed) {
-                            editor.commands.setColor(userColor)
-                        }
                         return false
                     }
                 },
@@ -678,21 +715,6 @@ function setupEventListeners() {
         }
     })
     
-    // 文本颜色选择器
-    document.getElementById('text-color').addEventListener('input', (e) => {
-        if (editor) {
-            const color = e.target.value
-            editor.chain().focus().setColor(color).run()
-        }
-    })
-    
-    // 清除文本颜色
-    document.getElementById('clear-color').addEventListener('click', () => {
-        if (editor) {
-            editor.chain().focus().unsetColor().run()
-            document.getElementById('text-color').value = '#000000'
-        }
-    })
     
     document.getElementById('document-name').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
