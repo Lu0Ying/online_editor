@@ -4,6 +4,7 @@ import Collaboration from '@tiptap/extension-collaboration'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement, updateOnlineUsersList } from './beautify.js'
+import { initChatModule, setupChat, setupChatSync, resetChatMessages, updateUserInfo } from './chat.js'
 
 // 从 localStorage 获取保存的用户名，如果没有则生成随机用户名
 const savedUserName = localStorage.getItem('onlineEditorUserName')
@@ -117,7 +118,6 @@ let isComposing = false  // 标记是否正在输入法组合输入（如拼音�
 let previousUsers = new Set()  // 跟踪之前的用户列表，用于检测加入/退出
 let autoSaveNotificationTimeout = null  // 用于防抖自动保存通知
 let hasShownConnectedMessage = false  // 标记是否已显示连接成功消息
-let chatMessagesArray = []  // 聊天消息ID数组，防止重复添加
 
 async function initEditor(documentName) {
     console.log('=== Initializing editor for document:', documentName, '===')
@@ -145,13 +145,8 @@ async function initEditor(documentName) {
         ydoc = null
     }
     
-    // 重置聊天消息数组
-    chatMessagesArray = []
-    // 清空聊天消息显示
-    const chatMessagesContainer = document.getElementById('chat-messages')
-    if (chatMessagesContainer) {
-        chatMessagesContainer.innerHTML = ''
-    }
+    // 重置聊天消息
+    resetChatMessages()
     
     currentDocumentName = documentName
     
@@ -328,6 +323,9 @@ function createEditor() {
             color: userColor
         })
     }
+    
+    // 初始化聊天模块
+    initChatModule(ydoc, provider, userId, userName)
     
     // 初始化聊天消息同步
     setupChatSync()
@@ -795,119 +793,6 @@ function setupEventListeners() {
     setupRename()
 }
 
-function setupChat() {
-    // 聊天室折叠/展开功能
-    const chatPanel = document.getElementById('chat-panel')
-    const chatToggle = document.getElementById('chat-toggle')
-    
-    chatToggle.addEventListener('click', () => {
-        chatPanel.classList.toggle('collapsed')
-    })
-    
-    // 发送消息
-    const sendBtn = document.getElementById('send-chat-btn')
-    const chatInput = document.getElementById('chat-input')
-    
-    sendBtn.addEventListener('click', sendChatMessage)
-    
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            sendChatMessage()
-        }
-    })
-}
-
-function sendChatMessage() {
-    const chatInput = document.getElementById('chat-input')
-    const message = chatInput.value.trim()
-    
-    if (!message || !provider || !ydoc) return
-    
-    const chatMessage = {
-        id: Date.now().toString(),
-        sender: userName,
-        senderId: userId,
-        content: message,
-        timestamp: new Date().toISOString()
-    }
-    
-    // 使用 Yjs 同步聊天消息
-    const chatArray = ydoc.getArray('chatMessages')
-    chatArray.push([chatMessage])
-    
-    chatInput.value = ''
-}
-
-function setupChatSync() {
-    if (!ydoc) {
-        console.log('ydoc not ready, cannot setup chat sync')
-        return
-    }
-    
-    console.log('Setting up chat sync...')
-    const chatArray = ydoc.getArray('chatMessages')
-    
-    // 监听聊天消息变化 - 使用正确的 Yjs observe 方式
-    chatArray.observe((event) => {
-        console.log('Chat array changed:', event)
-        // Yjs 的 observe 事件包含 changes，我们需要遍历新增的项
-        const changes = event.changes
-        if (changes && changes.added) {
-            changes.added.forEach((item) => {
-                // 获取新增的内容
-                const content = item.content
-                if (content && content.getContent) {
-                    const messages = content.getContent()
-                    messages.forEach((message) => {
-                        if (message) {
-                            addChatMessage(message)
-                        }
-                    })
-                }
-            })
-        }
-    })
-    
-    // 加载已有消息
-    const existingMessages = chatArray.toArray()
-    console.log('Existing messages:', existingMessages.length)
-    existingMessages.forEach(addChatMessage)
-}
-
-function addChatMessage(message) {
-    const chatMessagesContainer = document.getElementById('chat-messages')
-    if (!chatMessagesContainer) return
-    
-    // 避免重复添加
-    if (chatMessagesArray.includes(message.id)) return
-    chatMessagesArray.push(message.id)
-    
-    const messageElement = document.createElement('div')
-    messageElement.className = `chat-message ${message.senderId === userId ? 'own' : 'other'}`
-    
-    const timestamp = new Date(message.timestamp).toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit'
-    })
-    
-    messageElement.innerHTML = `
-        ${message.senderId !== userId ? `<div class="sender">${message.sender}</div>` : ''}
-        <div class="message-content">${escapeHtml(message.content)}</div>
-        <div style="font-size: 10px; opacity: 0.5; margin-top: 4px;">${timestamp}</div>
-    `
-    
-    chatMessagesContainer.appendChild(messageElement)
-    
-    // 滚动到底部
-    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div')
-    div.textContent = text
-    return div.innerHTML
-}
-
 function setupRename() {
     const renameBtn = document.getElementById('rename-btn')
     const renameModal = document.getElementById('rename-modal')
@@ -936,6 +821,9 @@ function setupRename() {
         
         // 保存到 localStorage
         localStorage.setItem('onlineEditorUserName', newName)
+        
+        // 更新 chat.js 模块中的用户名
+        updateUserInfo(userId, userName)
         
         // 更新 awareness 中的用户信息
         if (provider && provider.awareness) {
