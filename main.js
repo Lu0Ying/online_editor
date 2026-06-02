@@ -5,9 +5,11 @@ import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement, updateOnlineUsersList } from './beautify.js'
 
-const userId = `user-${Math.floor(Math.random() * 100000)}`
+// 从 localStorage 获取保存的用户名，如果没有则生成随机用户名
+const savedUserName = localStorage.getItem('onlineEditorUserName')
+const userId = savedUserName || `user-${Math.floor(Math.random() * 100000)}`
 const userColor = generateRandomColor()
-const userName = userId
+let userName = userId  // 使用 let 以便后续可以修改
 
 const UserHighlight = Mark.create({
     name: 'userHighlight',
@@ -115,6 +117,7 @@ let isComposing = false  // 标记是否正在输入法组合输入（如拼音�
 let previousUsers = new Set()  // 跟踪之前的用户列表，用于检测加入/退出
 let autoSaveNotificationTimeout = null  // 用于防抖自动保存通知
 let hasShownConnectedMessage = false  // 标记是否已显示连接成功消息
+let chatMessagesArray = []  // 聊天消息ID数组，防止重复添加
 
 async function initEditor(documentName) {
     console.log('=== Initializing editor for document:', documentName, '===')
@@ -140,6 +143,14 @@ async function initEditor(documentName) {
         console.log('Destroying existing ydoc...')
         ydoc.destroy()
         ydoc = null
+    }
+    
+    // 重置聊天消息数组
+    chatMessagesArray = []
+    // 清空聊天消息显示
+    const chatMessagesContainer = document.getElementById('chat-messages')
+    if (chatMessagesContainer) {
+        chatMessagesContainer.innerHTML = ''
     }
     
     currentDocumentName = documentName
@@ -317,6 +328,9 @@ function createEditor() {
             color: userColor
         })
     }
+    
+    // 初始化聊天消息同步
+    setupChatSync()
     
     try {
         editor = new Editor({
@@ -773,6 +787,174 @@ function setupEventListeners() {
         
         console.log(`✅ Document exported as ${filename}`)
     })
+    
+    // 聊天室功能
+    setupChat()
+    
+    // 重命名功能
+    setupRename()
+}
+
+// 聊天室相关变量
+let chatMessagesArray = []
+
+function setupChat() {
+    // 聊天室折叠/展开功能
+    const chatPanel = document.getElementById('chat-panel')
+    const chatToggle = document.getElementById('chat-toggle')
+    
+    chatToggle.addEventListener('click', () => {
+        chatPanel.classList.toggle('collapsed')
+    })
+    
+    // 发送消息
+    const sendBtn = document.getElementById('send-chat-btn')
+    const chatInput = document.getElementById('chat-input')
+    
+    sendBtn.addEventListener('click', sendChatMessage)
+    
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendChatMessage()
+        }
+    })
+}
+
+function sendChatMessage() {
+    const chatInput = document.getElementById('chat-input')
+    const message = chatInput.value.trim()
+    
+    if (!message || !provider || !ydoc) return
+    
+    const chatMessage = {
+        id: Date.now().toString(),
+        sender: userName,
+        senderId: userId,
+        content: message,
+        timestamp: new Date().toISOString()
+    }
+    
+    // 使用 Yjs 同步聊天消息
+    const chatArray = ydoc.getArray('chatMessages')
+    chatArray.push([chatMessage])
+    
+    chatInput.value = ''
+}
+
+function setupChatSync() {
+    if (!ydoc) return
+    
+    const chatArray = ydoc.getArray('chatMessages')
+    
+    // 监听聊天消息变化
+    chatArray.observe((event) => {
+        event.added.forEach((item) => {
+            const message = item.content[0]
+            addChatMessage(message)
+        })
+    })
+    
+    // 加载已有消息
+    chatArray.toArray().forEach(addChatMessage)
+}
+
+function addChatMessage(message) {
+    const chatMessagesContainer = document.getElementById('chat-messages')
+    if (!chatMessagesContainer) return
+    
+    // 避免重复添加
+    if (chatMessagesArray.includes(message.id)) return
+    chatMessagesArray.push(message.id)
+    
+    const messageElement = document.createElement('div')
+    messageElement.className = `chat-message ${message.senderId === userId ? 'own' : 'other'}`
+    
+    const timestamp = new Date(message.timestamp).toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+    
+    messageElement.innerHTML = `
+        ${message.senderId !== userId ? `<div class="sender">${message.sender}</div>` : ''}
+        <div class="message-content">${escapeHtml(message.content)}</div>
+        <div style="font-size: 10px; opacity: 0.5; margin-top: 4px;">${timestamp}</div>
+    `
+    
+    chatMessagesContainer.appendChild(messageElement)
+    
+    // 滚动到底部
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div')
+    div.textContent = text
+    return div.innerHTML
+}
+
+function setupRename() {
+    const renameBtn = document.getElementById('rename-btn')
+    const renameModal = document.getElementById('rename-modal')
+    const confirmBtn = document.getElementById('confirm-rename')
+    const cancelBtn = document.getElementById('cancel-rename')
+    const newUsernameInput = document.getElementById('new-username')
+    
+    renameBtn.addEventListener('click', () => {
+        newUsernameInput.value = userName
+        renameModal.style.display = 'flex'
+    })
+    
+    cancelBtn.addEventListener('click', () => {
+        renameModal.style.display = 'none'
+    })
+    
+    confirmBtn.addEventListener('click', () => {
+        const newName = newUsernameInput.value.trim()
+        if (!newName) {
+            alert('请输入昵称')
+            return
+        }
+        
+        // 更新本地用户名
+        userName = newName
+        
+        // 保存到 localStorage
+        localStorage.setItem('onlineEditorUserName', newName)
+        
+        // 更新 awareness 中的用户信息
+        if (provider && provider.awareness) {
+            provider.awareness.setLocalStateField('user', {
+                name: userName,
+                color: userColor
+            })
+        }
+        
+        // 更新用户信息面板显示
+        updateUserInfoPanel(userName)
+        
+        renameModal.style.display = 'none'
+        
+        showSystemNotification('昵称已更新', `你的昵称已改为: ${userName}`, 'info', 2500)
+    })
+    
+    // 点击遮罩关闭弹窗
+    renameModal.addEventListener('click', (e) => {
+        if (e.target === renameModal) {
+            renameModal.style.display = 'none'
+        }
+    })
+}
+
+function updateUserInfoPanel(newName) {
+    // 更新用户信息面板
+    const userInfoPanel = document.querySelector('[style*="position: fixed"][style*="bottom: 55px"][style*="right: 10px"]')
+    if (userInfoPanel) {
+        userInfoPanel.innerHTML = `<div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${userColor};"></div>
+            <span>${newName}</span>
+            <span style="color: #999; font-size: 11px;">（你的专属颜色）</span>
+        </div>`
+    }
 }
 
 async function init() {
