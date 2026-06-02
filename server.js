@@ -108,30 +108,77 @@ function gatherActiveUserIds(document) {
 function removeInactiveUserHighlights(document, activeUserIds) {
     const xmlFragment = document.get('content', Y.XmlFragment)
     if (!xmlFragment) {
+        console.log('⚠️ No xmlFragment found')
         return false
     }
 
+    console.log('🔍 removeInactiveUserHighlights called, activeUserIds:', Array.from(activeUserIds))
     let removed = false
 
-    function traverse(element) {
+    function traverse(element, depth = 0) {
         const children = element.toArray()
-        for (const child of children) {
+        console.log(`  ${'  '.repeat(depth)}Traversing ${children.length} children`)
+        
+        // 反向遍历，避免删除元素时索引变化导致跳过的元素
+        for (let i = children.length - 1; i >= 0; i--) {
+            const child = children[i]
+            console.log(`  ${'  '.repeat(depth)}Child ${i}: type=${child.constructor.name}`)
+            
             if (child instanceof Y.XmlElement) {
-                traverse(child)
+                traverse(child, depth + 1)
                 const attrs = child.getAttributes()
+                console.log(`  ${'  '.repeat(depth)}Attrs:`, attrs)
+                
                 if (attrs['data-user-highlight'] !== undefined) {
                     const highlightUserId = attrs['data-user-id']
+                    console.log(`  ${'  '.repeat(depth)}Found highlight, userId=${highlightUserId}, active=${activeUserIds.has(highlightUserId)}`)
+                    
                     if (highlightUserId && !activeUserIds.has(highlightUserId)) {
-                        const parent = child.parent
-                        if (parent) {
-                            const nestedChildren = child.toArray()
-                            const parentArray = parent.toArray()
-                            const idx = parentArray.indexOf(child)
-                            child.delete()
-                            if (nestedChildren.length > 0) {
-                                parent.insert(idx, nestedChildren)
-                            }
+                        // 在删除前保存子元素
+                        const nestedChildren = child.toArray()
+                        console.log(`  ${'  '.repeat(depth)}Removing wrapper, ${nestedChildren.length} nested children`)
+                        child.delete()
+                        // 在同一位置插入子元素
+                        if (nestedChildren.length > 0) {
+                            element.insert(i, nestedChildren)
+                        }
+                        removed = true
+                    }
+                }
+            } else if (child instanceof Y.XmlText) {
+                // 检查 YXmlText 上的 formatting marks
+                const delta = child.toDelta()
+                console.log(`  ${'  '.repeat(depth)}YXmlText delta:`, JSON.stringify(delta, null, 2))
+                
+                let hasChanges = false
+                const newDelta = delta.map(item => {
+                    if (item.attributes && item.attributes['userHighlight']) {
+                        const highlight = item.attributes['userHighlight']
+                        const highlightUserId = highlight.userId
+                        console.log(`  ${'  '.repeat(depth)}Found text highlight, userId=${highlightUserId}, active=${activeUserIds.has(highlightUserId)}`)
+                        
+                        if (highlightUserId && !activeUserIds.has(highlightUserId)) {
+                            // 移除高亮属性，保留文本
+                            const newAttrs = { ...item.attributes }
+                            delete newAttrs['userHighlight']
+                            hasChanges = true
                             removed = true
+                            console.log(`  ${'  '.repeat(depth)}Removing highlight for userId=${highlightUserId}`)
+                            return { ...item, attributes: Object.keys(newAttrs).length > 0 ? newAttrs : undefined }
+                        }
+                    }
+                    return item
+                })
+                
+                if (hasChanges) {
+                    console.log(`  ${'  '.repeat(depth)}Updating YXmlText with new delta`)
+                    // 重建 YXmlText 内容
+                    child.delete(0, child.length)
+                    let offset = 0
+                    for (const item of newDelta) {
+                        if (item.insert) {
+                            child.insert(offset, item.insert, item.attributes || {})
+                            offset += item.insert.length
                         }
                     }
                 }
@@ -143,6 +190,7 @@ function removeInactiveUserHighlights(document, activeUserIds) {
         traverse(xmlFragment)
     })
 
+    console.log(`🔍 removeInactiveUserHighlights done, removed=${removed}`)
     return removed
 }
 
@@ -218,6 +266,41 @@ async function startServer() {
                     return
                 }
             }
+
+            // 处理 /api/cleanup-highlights 请求 - 清除离线用户的高亮包装器
+            if (req.url.startsWith('/api/cleanup-highlights')) {
+                const url = new URL(req.url, `http://${req.headers.host}`)
+                const documentName = url.searchParams.get('name')
+
+                if (!documentName) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Document name is required' }))
+                    return
+                }
+
+                try {
+                    const ydoc = await loadYjsDocument(documentName)
+                    const activeUserIds = gatherActiveUserIds(ydoc)
+                    const removed = removeInactiveUserHighlights(ydoc, activeUserIds)
+
+                    if (removed) {
+                        await storeYjsDocument(documentName, ydoc)
+                        console.log(`🔧 Cleaned up stale highlight wrappers for document: ${documentName}`)
+                    }
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({
+                        success: true,
+                        message: removed ? 'Offline user highlights cleaned up' : 'No inactive highlights found',
+                        documentName
+                    }))
+                } catch (error) {
+                    console.error('Error cleaning up highlights:', error)
+                    res.writeHead(500, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Failed to cleanup highlights' }))
+                }
+                return
+            }
             
             // 其他请求返回 404
             res.writeHead(404, { 'Content-Type': 'text/plain' })
@@ -268,6 +351,10 @@ async function startServer() {
                     console.log(`Active user IDs for "${data.documentName}":`, Array.from(activeUserIds))
                     if (removeInactiveUserHighlights(data.document, activeUserIds)) {
                         console.log(`🔧 Cleaned up stale highlight wrappers for document: ${data.documentName}`)
+                        // 手动保存文档，因为断开连接时不会自动触发 onStoreDocument
+                        storeYjsDocument(data.documentName, data.document).catch(err => {
+                            console.error('Error saving document after cleanup:', err)
+                        })
                     }
                 } catch (error) {
                     console.error('Error cleaning up highlight wrappers on disconnect:', error)
