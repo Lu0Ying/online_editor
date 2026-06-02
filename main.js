@@ -795,9 +795,6 @@ function setupEventListeners() {
     setupRename()
 }
 
-// 聊天室相关变量
-let chatMessagesArray = []
-
 function setupChat() {
     // 聊天室折叠/展开功能
     const chatPanel = document.getElementById('chat-panel')
@@ -842,20 +839,39 @@ function sendChatMessage() {
 }
 
 function setupChatSync() {
-    if (!ydoc) return
+    if (!ydoc) {
+        console.log('ydoc not ready, cannot setup chat sync')
+        return
+    }
     
+    console.log('Setting up chat sync...')
     const chatArray = ydoc.getArray('chatMessages')
     
-    // 监听聊天消息变化
+    // 监听聊天消息变化 - 使用正确的 Yjs observe 方式
     chatArray.observe((event) => {
-        event.added.forEach((item) => {
-            const message = item.content[0]
-            addChatMessage(message)
-        })
+        console.log('Chat array changed:', event)
+        // Yjs 的 observe 事件包含 changes，我们需要遍历新增的项
+        const changes = event.changes
+        if (changes && changes.added) {
+            changes.added.forEach((item) => {
+                // 获取新增的内容
+                const content = item.content
+                if (content && content.getContent) {
+                    const messages = content.getContent()
+                    messages.forEach((message) => {
+                        if (message) {
+                            addChatMessage(message)
+                        }
+                    })
+                }
+            })
+        }
     })
     
     // 加载已有消息
-    chatArray.toArray().forEach(addChatMessage)
+    const existingMessages = chatArray.toArray()
+    console.log('Existing messages:', existingMessages.length)
+    existingMessages.forEach(addChatMessage)
 }
 
 function addChatMessage(message) {
