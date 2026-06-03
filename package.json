@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:frontend\"",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:fileserver\" \"npm run dev:frontend\"",
     "dev:server": "node server.js",
+    "dev:fileserver": "node server/file-server.js",
     "dev:frontend": "vite",
     "build": "vite build",
     "preview": "vite preview"
@@ -27,6 +28,7 @@
     "@tiptap/starter-kit": "^3.22.3",
     "@tiptap/y-tiptap": "^3.0.3",
     "concurrently": "^8.2.2",
+    "jszip": "^3.10.1",
     "vite": "^8.0.8",
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.30"
