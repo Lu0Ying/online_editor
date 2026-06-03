@@ -70,6 +70,9 @@
                     </select>
                     <button id="export-btn" class="btn btn-secondary">导出文档</button>
                 </div>
+                <button id="version-btn" class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-size: 12px;">
+                    📋 版本管理
+                </button>
                 <span class="collaboration-info">多人实时协作 • 自动保存</span>
             </div>
         </div>
@@ -77,11 +80,13 @@
             style="padding: 10px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; display: flex; align-items: center; gap: 10px; font-size: 14px;">
             <span style="font-weight: bold;">在线用户:</span>
             <div id="online-users-list" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
-            <button id="rename-btn" class="btn btn-sm btn-secondary" style="margin-left: auto; padding: 4px 12px; font-size: 12px;">
+        </div>
+        <div id="current-user-bar"
+            style="padding: 8px 10px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+            <span style="font-weight: bold;">当前用户:</span>
+            <span id="current-user-name" style="color: #1e293b;">加载中...</span>
+            <button id="rename-btn" class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-size: 12px;">
                 重命名
-            </button>
-            <button id="version-btn" class="btn btn-sm btn-secondary" style="margin-left: 8px; padding: 4px 12px; font-size: 12px;">
-                📋 版本管理
             </button>
         </div>
         <div id="editor" class="editor-box"></div>
