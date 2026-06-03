@@ -1,37 +1,74 @@
 import * as Y from 'yjs'
 
+const API_BASE_URL = 'http://localhost:1236'
+
 class VersionManager {
     constructor() {
         this.snapshots = new Map()
-        this.snapshotIdCounter = 0
-        this.maxSnapshots = 50
+        this.isLoading = false
+        this.initialized = false
     }
 
-    saveSnapshot(doc, documentName, description = '') {
-        const snapshotId = `snapshot-${++this.snapshotIdCounter}`
-        const update = Y.encodeStateAsUpdate(doc)
-        const binaryString = Array.from(update, byte => String.fromCharCode(byte)).join('')
-        const base64State = btoa(binaryString)
-        
-        const snapshot = {
-            id: snapshotId,
-            documentName,
-            timestamp: Date.now(),
-            description: description || this._generateDescription(),
-            content: base64State,
-            size: update.byteLength
+    async init() {
+        if (this.initialized) return
+        this.initialized = true
+        await this.loadSnapshotsFromServer()
+    }
+
+    async loadSnapshotsFromServer() {
+        try {
+            this.isLoading = true
+            const response = await fetch(`${API_BASE_URL}/api/snapshots`)
+            const data = await response.json()
+            
+            this.snapshots.clear()
+            if (data.snapshots && Array.isArray(data.snapshots)) {
+                data.snapshots.forEach(snapshot => {
+                    this.snapshots.set(snapshot.id, snapshot)
+                })
+            }
+            console.log('✅ 从服务器加载了', this.snapshots.size, '个快照')
+        } catch (error) {
+            console.error('❌ 从服务器加载快照失败:', error)
+        } finally {
+            this.isLoading = false
         }
-        
-        this.snapshots.set(snapshotId, snapshot)
-        
-        if (this.snapshots.size > this.maxSnapshots) {
-            const oldestId = Array.from(this.snapshots.keys()).sort()[0]
-            this.snapshots.delete(oldestId)
+    }
+
+    async saveSnapshot(doc, documentName, description = '') {
+        try {
+            // 获取完整文档状态
+            const update = Y.encodeStateAsUpdate(doc)
+            const binaryString = Array.from(update, byte => String.fromCharCode(byte)).join('')
+            const base64State = btoa(binaryString)
+            
+            const requestBody = {
+                documentName,
+                content: base64State,
+                description: description || this._generateDescription()
+            }
+            
+            const response = await fetch(`${API_BASE_URL}/api/snapshots/save`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            })
+            
+            const data = await response.json()
+            
+            if (data.success && data.snapshot) {
+                this.snapshots.set(data.snapshot.id, data.snapshot)
+                console.log('✅ 快照已保存到服务器:', data.snapshot.id)
+                return data.snapshot
+            } else {
+                throw new Error(data.error || '保存失败')
+            }
+        } catch (error) {
+            console.error('❌ 保存快照失败:', error)
+            throw error
         }
-        
-        this._saveToLocalStorage()
-        
-        return snapshot
     }
 
     getSnapshot(snapshotId) {
@@ -48,157 +85,264 @@ class VersionManager {
         return snapshots.sort((a, b) => b.timestamp - a.timestamp)
     }
 
-    deleteSnapshot(snapshotId) {
-        const deleted = this.snapshots.delete(snapshotId)
-        if (deleted) {
-            this._saveToLocalStorage()
+    async deleteSnapshot(snapshotId) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/snapshots/delete?id=${encodeURIComponent(snapshotId)}`, {
+                method: 'DELETE'
+            })
+            
+            const data = await response.json()
+            
+            if (data.success) {
+                this.snapshots.delete(snapshotId)
+                console.log('✅ 快照已从服务器删除:', snapshotId)
+                return true
+            } else {
+                throw new Error(data.error || '删除失败')
+            }
+        } catch (error) {
+            console.error('❌ 删除快照失败:', error)
+            throw error
         }
-        return deleted
     }
 
-    restoreSnapshot(doc, snapshotId) {
+    async restoreSnapshot(doc, snapshotId) {
         const snapshot = this.snapshots.get(snapshotId)
         if (!snapshot) {
             throw new Error('快照不存在')
         }
         
         try {
+            // 解码base64内容
             const binaryString = atob(snapshot.content)
             const update = new Uint8Array(binaryString.length)
             for (let i = 0; i < binaryString.length; i++) {
                 update[i] = binaryString.charCodeAt(i)
             }
             
-            // 创建临时文档来读取快照内容
+            // 创建临时文档
             const tempDoc = new Y.Doc()
             Y.applyUpdate(tempDoc, update)
             
-            // 获取快照中的内容
+            // 获取快照的文本内容
             const snapshotContent = tempDoc.get('content', Y.XmlFragment)
-            
-            // 清空当前文档的内容
-            const currentContent = doc.get('content', Y.XmlFragment)
-            currentContent.delete(0, currentContent.length)
-            
-            // 从快照复制内容到当前文档
-            snapshotContent.forEach((child) => {
-                currentContent.push([child])
-            })
+            const textContent = this._extractText(snapshotContent)
             
             tempDoc.destroy()
+            
+            // 获取当前文档的内容
+            const currentContent = doc.get('content', Y.XmlFragment)
+            
+            // 清空当前内容
+            doc.transact(() => {
+                if (currentContent.length > 0) {
+                    currentContent.delete(0, currentContent.length)
+                }
+            })
+            
+            // 直接插入整个文本作为单个段落
+            doc.transact(() => {
+                const paragraph = new Y.XmlElement('paragraph')
+                const textNode = new Y.XmlText()
+                // 将换行符替换为特殊的格式保留在文本中
+                textNode.insert(0, textContent)
+                paragraph.insert(0, [textNode])
+                currentContent.insert(0, [paragraph])
+            })
+            
+            console.log('✅ 快照已恢复:', snapshotId, '文本长度:', textContent.length)
             return snapshot
         } catch (error) {
+            console.error('❌ 恢复快照失败:', error)
             throw new Error('恢复快照失败: ' + error.message)
         }
     }
 
-    compareSnapshots(snapshotId1, snapshotId2) {
-        const snap1 = this.snapshots.get(snapshotId1)
-        const snap2 = this.snapshots.get(snapshotId2)
-        
-        if (!snap1) {
-            throw new Error('快照 ' + snapshotId1 + ' 不存在')
+    async compareSnapshots(snapshotId1, snapshotId2) {
+        try {
+            const snap1 = this.snapshots.get(snapshotId1)
+            const snap2 = this.snapshots.get(snapshotId2)
+            
+            if (!snap1 || !snap2) {
+                throw new Error('快照不存在')
+            }
+            
+            return this._generateDiff(snap1, snap2)
+        } catch (error) {
+            console.error('❌ 对比快照失败:', error)
+            throw error
         }
-        if (!snap2) {
-            throw new Error('快照 ' + snapshotId2 + ' 不存在')
-        }
-        
-        const content1 = this._decodeSnapshotContent(snap1)
-        const content2 = this._decodeSnapshotContent(snap2)
-        
-        return this._generateDiff(content1, content2, snap1, snap2)
     }
 
-    _decodeSnapshotContent(snapshot) {
-        const binaryString = atob(snapshot.content)
-        const update = new Uint8Array(binaryString.length)
-        for (let i = 0; i < binaryString.length; i++) {
-            update[i] = binaryString.charCodeAt(i)
-        }
-        
-        const tempDoc = new Y.Doc()
-        Y.applyUpdate(tempDoc, update)
-        
-        const content = tempDoc.get('content', Y.XmlFragment)
-        return content ? content.toString() : ''
-    }
-
-    _generateDiff(content1, content2, snap1, snap2) {
-        const lines1 = content1.split('\n')
-        const lines2 = content2.split('\n')
-        
-        const diff = {
-            snapshot1: {
-                id: snap1.id,
-                timestamp: snap1.timestamp,
-                description: snap1.description
-            },
-            snapshot2: {
-                id: snap2.id,
-                timestamp: snap2.timestamp,
-                description: snap2.description
-            },
-            added: [],
-            removed: [],
-            modified: [],
-            totalChanges: 0
-        }
-        
-        const maxLen = Math.max(lines1.length, lines2.length)
-        
-        for (let i = 0; i < maxLen; i++) {
-            const line1 = lines1[i] || ''
-            const line2 = lines2[i] || ''
+    _generateDiff(snap1, snap2) {
+        // 解码内容进行详细对比
+        try {
+            const content1 = this._getTextContent(snap1?.content)
+            const content2 = this._getTextContent(snap2?.content)
             
-            if (!line1 && !line2) continue
+            const diff = {
+                snapshot1: {
+                    id: snap1?.id || 'unknown',
+                    timestamp: snap1?.timestamp || 0,
+                    description: snap1?.description || ''
+                },
+                snapshot2: {
+                    id: snap2?.id || 'unknown',
+                    timestamp: snap2?.timestamp || 0,
+                    description: snap2?.description || ''
+                },
+                added: [],
+                removed: [],
+                modified: [],
+                totalChanges: 0
+            }
             
-            if (!line1 && line2) {
-                diff.added.push({ line: i + 1, content: line2 })
-                diff.totalChanges++
-            } else if (line1 && !line2) {
-                diff.removed.push({ line: i + 1, content: line1 })
-                diff.totalChanges++
-            } else if (line1 !== line2) {
-                diff.modified.push({ line: i + 1, oldContent: line1, newContent: line2 })
-                diff.totalChanges++
+            const lines1 = content1.split('\n')
+            const lines2 = content2.split('\n')
+            const maxLen = Math.max(lines1.length, lines2.length)
+            
+            for (let i = 0; i < maxLen; i++) {
+                const line1 = lines1[i] || ''
+                const line2 = lines2[i] || ''
+                
+                if (!line1 && !line2) continue
+                
+                if (!line1 && line2) {
+                    diff.added.push({ line: i + 1, content: line2 })
+                    diff.totalChanges++
+                } else if (line1 && !line2) {
+                    diff.removed.push({ line: i + 1, content: line1 })
+                    diff.totalChanges++
+                } else if (line1 !== line2) {
+                    diff.modified.push({ line: i + 1, oldContent: line1, newContent: line2 })
+                    diff.totalChanges++
+                }
+            }
+            
+            console.log('✅ 对比完成:', { totalChanges: diff.totalChanges, added: diff.added.length, removed: diff.removed.length, modified: diff.modified.length })
+            return diff
+        } catch (error) {
+            console.error('生成差异时出错:', error)
+            return {
+                snapshot1: {
+                    id: snap1?.id || 'unknown',
+                    timestamp: snap1?.timestamp || 0,
+                    description: snap1?.description || ''
+                },
+                snapshot2: {
+                    id: snap2?.id || 'unknown',
+                    timestamp: snap2?.timestamp || 0,
+                    description: snap2?.description || ''
+                },
+                added: [],
+                removed: [],
+                modified: [],
+                totalChanges: 0,
+                error: '无法生成详细差异: ' + error.message
             }
         }
+    }
+
+    _getTextContent(base64Content) {
+        if (!base64Content) return ''
         
-        return diff
+        try {
+            const binaryString = atob(base64Content)
+            const update = new Uint8Array(binaryString.length)
+            for (let i = 0; i < binaryString.length; i++) {
+                update[i] = binaryString.charCodeAt(i)
+            }
+            
+            const tempDoc = new Y.Doc()
+            Y.applyUpdate(tempDoc, update)
+            
+            const content = tempDoc.get('content', Y.XmlFragment)
+            const text = this._extractText(content)
+            tempDoc.destroy()
+            
+            return text
+        } catch (error) {
+            console.error('解码内容失败:', error)
+            return ''
+        }
+    }
+
+    _extractText(element, preserveStructure = true) {
+        let text = ''
+        if (!element) return text
+        
+        try {
+            if (typeof element.forEach === 'function') {
+                let elementCount = 0
+                element.forEach((child, index) => {
+                    if (child instanceof Y.XmlText) {
+                        const delta = child.toDelta()
+                        delta.forEach(op => {
+                            if (typeof op.insert === 'string') {
+                                text += op.insert
+                            }
+                        })
+                    } else if (child instanceof Y.XmlElement) {
+                        const tagName = (child.tagName || '').toLowerCase()
+                        // 扩展块级标签列表
+                        const blockTags = ['paragraph', 'p', 'heading', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'listitem', 'li', 'codeblock', 'pre', 'div', 'section', 'br']
+                        const isBlock = blockTags.includes(tagName)
+                        
+                        // 在块级元素之间添加换行
+                        if (preserveStructure && isBlock && elementCount > 0 && !text.endsWith('\n')) {
+                            text += '\n'
+                        }
+                        
+                        text += this._extractText(child, preserveStructure)
+                        
+                        // 处理 <br> 标签
+                        if (tagName === 'br') {
+                            text += '\n'
+                        }
+                        
+                        // 在块级元素后添加换行
+                        if (preserveStructure && isBlock && !text.endsWith('\n')) {
+                            text += '\n'
+                        }
+                        
+                        elementCount++
+                    }
+                })
+            }
+        } catch (error) {
+            console.error('提取文本失败:', error)
+        }
+        
+        // 清理开头多余的换行
+        text = text.replace(/^\n+/, '')
+        // 保留结尾最多一个换行
+        text = text.replace(/\n+$/, '') + '\n'
+        // 清理连续超过2个的换行
+        text = text.replace(/\n{3,}/g, '\n\n')
+        
+        console.log('📝 _extractText 提取的文本:', JSON.stringify(text).substring(0, 200))
+        return text
     }
 
     _generateDescription() {
         const now = new Date()
-        return `自动保存 - ${now.toLocaleString('zh-CN')}`
+        return `快照 - ${now.toLocaleString('zh-CN')}`
     }
 
-    _saveToLocalStorage() {
-        const data = {
-            snapshots: Array.from(this.snapshots.values()),
-            snapshotIdCounter: this.snapshotIdCounter
-        }
-        localStorage.setItem('versionManagerData', JSON.stringify(data))
-    }
-
-    loadFromLocalStorage() {
-        const stored = localStorage.getItem('versionManagerData')
-        if (stored) {
-            try {
-                const data = JSON.parse(stored)
-                data.snapshots.forEach(snapshot => {
-                    this.snapshots.set(snapshot.id, snapshot)
+    async clearAllSnapshots() {
+        try {
+            const snapshots = Array.from(this.snapshots.keys())
+            for (const snapshotId of snapshots) {
+                await fetch(`${API_BASE_URL}/api/snapshots/delete?id=${encodeURIComponent(snapshotId)}`, {
+                    method: 'DELETE'
                 })
-                this.snapshotIdCounter = data.snapshotIdCounter || 0
-            } catch (error) {
-                console.error('加载版本数据失败:', error)
             }
+            this.snapshots.clear()
+            console.log('✅ 所有快照已从服务器删除')
+        } catch (error) {
+            console.error('❌ 清空快照失败:', error)
+            throw error
         }
-    }
-
-    clearAllSnapshots() {
-        this.snapshots.clear()
-        this.snapshotIdCounter = 0
-        localStorage.removeItem('versionManagerData')
     }
 
     getSnapshotCount(documentName = null) {
@@ -210,7 +354,7 @@ class VersionManager {
 }
 
 const versionManager = new VersionManager()
-versionManager.loadFromLocalStorage()
+let showingAllSnapshots = false
 
 export { versionManager, VersionManager }
 
@@ -227,6 +371,15 @@ export function formatTimestamp(timestamp) {
 }
 
 export function generateDiffHtml(diff) {
+    if (diff.error) {
+        return `<div class="diff-container">
+            <div class="diff-header">
+                <div class="diff-title">差异对比结果</div>
+                <div class="diff-error">${diff.error}</div>
+            </div>
+        </div>`
+    }
+    
     let html = `<div class="diff-container">`
     
     html += `<div class="diff-header">
@@ -306,7 +459,10 @@ function escapeHtml(text) {
     return div.innerHTML
 }
 
-export function initVersionManagerUI() {
+export async function initVersionManagerUI() {
+    // 初始化时从服务器加载快照
+    await versionManager.init()
+    
     const versionPanel = document.createElement('div')
     versionPanel.id = 'version-panel'
     versionPanel.className = 'version-panel'
@@ -321,16 +477,18 @@ export function initVersionManagerUI() {
                 <span style="font-weight: 600; color: var(--primary-700);">当前文档:</span>
                 <span id="version-current-doc-name" style="color: var(--primary-600);">未打开</span>
             </div>
-            <div style="padding: 10px 24px; background: rgba(251, 191, 36, 0.1); border-radius: 8px; margin: 0 24px 16px; font-size: 12px; color: #92400e; line-height: 1.5;">
-                💾 快照保存在浏览器本地存储 (LocalStorage)，清除浏览器数据会导致快照丢失
+            <div style="padding: 10px 24px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; margin: 0 24px 16px; font-size: 12px; color: #166534; line-height: 1.5;">
+                💾 快照保存在服务器 snapshots 文件夹中，持久化存储
             </div>
             <div class="version-actions">
                 <button id="save-snapshot-btn" class="btn btn-primary">保存快照</button>
                 <button id="compare-snapshots-btn" class="btn btn-secondary">对比版本</button>
+                <button id="show-all-snapshots-btn" class="btn btn-secondary">显示所有快照</button>
+                <button id="refresh-snapshots-btn" class="btn btn-secondary">刷新列表</button>
                 <button id="clear-all-snapshots-btn" class="btn btn-danger">清空所有</button>
             </div>
             <div class="version-list">
-                <h3>历史快照</h3>
+                <h3>历史快照 <span id="snapshot-filter-label" style="font-weight: normal; font-size: 12px; color: #64748b;"></span></h3>
                 <div id="snapshot-list" class="snapshot-list"></div>
             </div>
             <div id="diff-result" class="diff-result"></div>
@@ -346,6 +504,8 @@ function setupVersionPanelListeners() {
     const closeBtn = document.getElementById('close-version-panel')
     const saveBtn = document.getElementById('save-snapshot-btn')
     const compareBtn = document.getElementById('compare-snapshots-btn')
+    const showAllBtn = document.getElementById('show-all-snapshots-btn')
+    const refreshBtn = document.getElementById('refresh-snapshots-btn')
     const clearBtn = document.getElementById('clear-all-snapshots-btn')
     const versionPanel = document.getElementById('version-panel')
     
@@ -363,20 +523,43 @@ function setupVersionPanelListeners() {
         const docName = window.currentDocumentName || 'unnamed'
         const description = prompt(`为文档 "${docName}" 保存快照\n\n请输入快照描述（可选，直接确定则使用默认描述）：`)
         
-        // 用户点击取消则不保存
         if (description === null) {
             return
         }
         
-        const snapshot = versionManager.saveSnapshot(ydoc, docName, description)
-        alert(`快照已保存！\n\n文档: ${docName}\nID: ${snapshot.id}\n时间: ${formatTimestamp(snapshot.timestamp)}`)
-        renderSnapshotList()
+        try {
+            saveBtn.disabled = true
+            saveBtn.textContent = '保存中...'
+            
+            const snapshot = await versionManager.saveSnapshot(ydoc, docName, description)
+            alert(`✅ 快照已保存到服务器！\n\n文档: ${docName}\nID: ${snapshot.id}\n时间: ${formatTimestamp(snapshot.timestamp)}`)
+            renderSnapshotList(showingAllSnapshots ? 'all' : 'current')
+        } catch (error) {
+            alert('❌ 保存失败: ' + error.message)
+        } finally {
+            saveBtn.disabled = false
+            saveBtn.textContent = '保存快照'
+        }
     })
     
-    compareBtn.addEventListener('click', () => {
+    refreshBtn.addEventListener('click', async () => {
+        try {
+            refreshBtn.disabled = true
+            refreshBtn.textContent = '刷新中...'
+            await versionManager.loadSnapshotsFromServer()
+            renderSnapshotList(showingAllSnapshots ? 'all' : 'current')
+        } catch (error) {
+            alert('❌ 刷新失败: ' + error.message)
+        } finally {
+            refreshBtn.disabled = false
+            refreshBtn.textContent = '刷新列表'
+        }
+    })
+    
+    compareBtn.addEventListener('click', async () => {
         const snapshots = versionManager.getAllSnapshots(window.currentDocumentName)
         if (snapshots.length < 2) {
-            alert('至少需要两个快照才能进行对比')
+            alert('至少需要两个快照才能进行对比\n\n提示：当前' + (window.currentDocumentName ? `"${window.currentDocumentName}"` : '当前文档') + '只有 ' + snapshots.length + ' 个快照')
             return
         }
         
@@ -419,7 +602,7 @@ function setupVersionPanelListeners() {
         
         document.body.appendChild(compareModal)
         
-        document.getElementById('do-compare-btn').addEventListener('click', () => {
+        document.getElementById('do-compare-btn').addEventListener('click', async () => {
             const snap1Id = document.getElementById('compare-snap1').value
             const snap2Id = document.getElementById('compare-snap2').value
             
@@ -429,13 +612,15 @@ function setupVersionPanelListeners() {
             }
             
             try {
-                const diff = versionManager.compareSnapshots(snap1Id, snap2Id)
+                document.getElementById('do-compare-btn').disabled = true
+                document.getElementById('do-compare-btn').textContent = '对比中...'
+                
+                const diff = await versionManager.compareSnapshots(snap1Id, snap2Id)
                 const diffHtml = generateDiffHtml(diff)
                 const diffResult = document.getElementById('diff-result')
                 diffResult.innerHTML = diffHtml
                 diffResult.style.display = 'block'
                 
-                // 滚动到对比结果区域
                 setTimeout(() => {
                     diffResult.scrollIntoView({ behavior: 'smooth', block: 'start' })
                 }, 100)
@@ -443,6 +628,9 @@ function setupVersionPanelListeners() {
             } catch (error) {
                 console.error('对比失败:', error)
                 alert('对比失败: ' + error.message)
+            } finally {
+                document.getElementById('do-compare-btn').disabled = false
+                document.getElementById('do-compare-btn').textContent = '开始对比'
             }
             
             document.body.removeChild(compareModal)
@@ -453,11 +641,34 @@ function setupVersionPanelListeners() {
         })
     })
     
-    clearBtn.addEventListener('click', () => {
+    showAllBtn.addEventListener('click', () => {
+        showingAllSnapshots = !showingAllSnapshots
+        if (showingAllSnapshots) {
+            showAllBtn.textContent = '显示当前文档'
+            showAllBtn.classList.remove('btn-secondary')
+            showAllBtn.classList.add('btn-primary')
+        } else {
+            showAllBtn.textContent = '显示所有快照'
+            showAllBtn.classList.remove('btn-primary')
+            showAllBtn.classList.add('btn-secondary')
+        }
+        renderSnapshotList(showingAllSnapshots ? 'all' : 'current')
+    })
+    
+    clearBtn.addEventListener('click', async () => {
         if (confirm('确定要清空所有快照吗？此操作不可恢复！')) {
-            versionManager.clearAllSnapshots()
-            renderSnapshotList()
-            alert('已清空所有快照')
+            try {
+                clearBtn.disabled = true
+                clearBtn.textContent = '清空中...'
+                await versionManager.clearAllSnapshots()
+                renderSnapshotList(showingAllSnapshots ? 'all' : 'current')
+                alert('✅ 已清空所有快照')
+            } catch (error) {
+                alert('❌ 清空失败: ' + error.message)
+            } finally {
+                clearBtn.disabled = false
+                clearBtn.textContent = '清空所有'
+            }
         }
     })
     
@@ -468,14 +679,25 @@ function setupVersionPanelListeners() {
     })
 }
 
-export function renderSnapshotList() {
+export function renderSnapshotList(filter = 'current') {
     const listContainer = document.getElementById('snapshot-list')
-    const snapshots = versionManager.getAllSnapshots(window.currentDocumentName)
+    const filterLabel = document.getElementById('snapshot-filter-label')
+    
+    let snapshots
+    if (filter === 'all') {
+        snapshots = versionManager.getAllSnapshots()
+        if (filterLabel) filterLabel.textContent = '(显示所有快照，共 ' + snapshots.length + ' 个)'
+    } else {
+        snapshots = versionManager.getAllSnapshots(window.currentDocumentName)
+        if (filterLabel) filterLabel.textContent = `(当前文档: ${window.currentDocumentName || '未打开'}，共 ${snapshots.length} 个)`
+    }
     
     if (!listContainer) return
     
+    console.log('📋 渲染快照列表，过滤模式:', filter, '数量:', snapshots.length)
+    
     if (snapshots.length === 0) {
-        listContainer.innerHTML = '<p style="text-align: center; color: #999;">暂无快照</p>'
+        listContainer.innerHTML = '<p style="text-align: center; color: #999;">暂无快照<br><small>点击「保存快照」创建第一个版本</small></p>'
         return
     }
     
@@ -486,8 +708,7 @@ export function renderSnapshotList() {
                 <div class="snapshot-description">${snap.description}</div>
                 <div class="snapshot-meta">
                     <span>文档: ${snap.documentName}</span>
-                    <span>ID: ${snap.id}</span>
-                    <span>大小: ${(snap.size / 1024).toFixed(2)} KB</span>
+                    <span>ID: ${snap.id.substring(0, 20)}...</span>
                 </div>
             </div>
             <div class="snapshot-actions">
@@ -504,7 +725,8 @@ export function renderSnapshotList() {
             
             if (!snapshot) {
                 alert('快照不存在或已被删除')
-                renderSnapshotList()
+                await versionManager.loadSnapshotsFromServer()
+                renderSnapshotList(filter)
                 return
             }
             
@@ -523,36 +745,41 @@ export function renderSnapshotList() {
                 }
                 
                 try {
-                    // 恢复快照到 ydoc
-                    versionManager.restoreSnapshot(ydoc, snapshotId)
+                    btn.disabled = true
+                    btn.textContent = '恢复中...'
                     
-                    // 等待 Yjs 同步更新
+                    await versionManager.restoreSnapshot(ydoc, snapshotId)
+                    
                     setTimeout(() => {
-                        // 刷新编辑器内容
-                        if (editor && !editor.isDestroyed) {
-                            editor.commands.clearContent()
-                            const content = ydoc.get('content', Y.XmlFragment)
-                            if (content) {
-                                // 内容已通过 Yjs 自动同步
-                            }
-                        }
                         alert(`✅ 恢复成功！\n\n文档已恢复到 ${formatTimestamp(snapshot.timestamp)} 的版本`)
                     }, 500)
                     
                 } catch (error) {
                     console.error('恢复失败:', error)
                     alert('❌ 恢复失败: ' + error.message)
+                } finally {
+                    btn.disabled = false
+                    btn.textContent = '恢复'
                 }
             }
         })
     })
     
     document.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             const snapshotId = e.target.getAttribute('data-id')
             if (confirm('确定要删除此快照吗？')) {
-                versionManager.deleteSnapshot(snapshotId)
-                renderSnapshotList()
+                try {
+                    btn.disabled = true
+                    btn.textContent = '删除中...'
+                    await versionManager.deleteSnapshot(snapshotId)
+                    renderSnapshotList(filter)
+                } catch (error) {
+                    alert('❌ 删除失败: ' + error.message)
+                } finally {
+                    btn.disabled = false
+                    btn.textContent = '删除'
+                }
             }
         })
     })
@@ -561,12 +788,11 @@ export function renderSnapshotList() {
 export function showVersionPanel() {
     const panel = document.getElementById('version-panel')
     if (panel) {
-        // 更新当前文档名称显示
         const docNameElement = document.getElementById('version-current-doc-name')
         if (docNameElement) {
             docNameElement.textContent = window.currentDocumentName || '未打开'
         }
-        renderSnapshotList()
+        renderSnapshotList(showingAllSnapshots ? 'all' : 'current')
         document.getElementById('diff-result').style.display = 'none'
         panel.style.display = 'flex'
     }
