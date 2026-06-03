@@ -115,6 +115,7 @@ let currentDocumentName = 'test_document'  // 默认文档名称
 let saveTimeout = null  // 用于前端防抖保存提示
 let isEditorCreated = false  // 防止重复创建编辑器
 let isComposing = false  // 标记是否正在输入法组合输入（如拼音）
+let compositionStartPos = null  // 记录组合输入开始时的光标位置，用于追溯高亮
 let previousUsers = new Set()  // 跟踪之前的用户列表，用于检测加入/退出
 let autoSaveNotificationTimeout = null  // 用于防抖自动保存通知
 let hasShownConnectedMessage = false  // 标记是否已显示连接成功消息
@@ -376,26 +377,51 @@ function createEditor() {
                         ]
 
                         if (event.inputType && insertTypes.includes(event.inputType)) {
-                            editor.commands.setUserHighlight({
-                                userId,
-                                userName,
-                                color: userColor
-                            })
+                            // 组合输入期间跳过 setUserHighlight，
+                            // 避免操作编辑器状态干扰浏览器 IME 导致字符重复
+                            if (!isComposing) {
+                                editor.commands.setUserHighlight({
+                                    userId,
+                                    userName,
+                                    color: userColor
+                                })
+                            }
                         }
 
                         return false
                     },
                     compositionstart: () => {
-                        // 开始组合输入（如拼音输入）
                         isComposing = true
-                        console.log('Composition started')
-                        return false
+                        compositionStartPos = editor ? editor.state.selection.from : null
+                        return true
                     },
                     compositionend: () => {
-                        // 结束组合输入，确保完整文本被插入
                         isComposing = false
-                        console.log('Composition ended')
-                        return false
+
+                        if (editor && !editor.isDestroyed && compositionStartPos !== null) {
+                            const startPos = compositionStartPos
+                            compositionStartPos = null
+                            // 延迟执行：确保 IME 完全释放后再设置高亮，
+                            // 避免在 composition 生命周期内操作编辑器状态
+                            setTimeout(() => {
+                                if (editor && !editor.isDestroyed) {
+                                    const endPos = editor.state.selection.from
+                                    if (endPos > startPos) {
+                                        editor.chain()
+                                            .setTextSelection({ from: startPos, to: endPos })
+                                            .setUserHighlight({
+                                                userId,
+                                                userName,
+                                                color: userColor
+                                            })
+                                            .setTextSelection(endPos)
+                                            .run()
+                                    }
+                                }
+                            }, 0)
+                        }
+
+                        return true
                     }
                 },
                 attributes: {
