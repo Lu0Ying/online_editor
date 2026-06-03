@@ -1010,6 +1010,65 @@ body.is-longpress .pointer {
     background: rgba(0, 0, 0, 0.1);
 }
 
+/* 文档类型选择弹窗 */
+#doctype-modal .modal-content {
+    max-width: 480px;
+}
+
+.doctype-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.doctype-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: 18px 20px !important;
+    border: 2px solid #e9e5ff !important;
+    border-radius: 12px !important;
+    background: white !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    flex: none !important;
+}
+
+.doctype-option:hover {
+    border-color: var(--primary-400) !important;
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15) !important;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.04) 0%, rgba(236, 72, 153, 0.03) 100%) !important;
+}
+
+.doctype-icon {
+    font-size: 28px;
+    margin-bottom: 6px;
+}
+
+.doctype-label {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 4px;
+}
+
+.doctype-desc {
+    font-size: 13px;
+    color: #94a3b8;
+    font-weight: 400;
+}
+
+#cancel-doctype {
+    background: rgba(0, 0, 0, 0.06);
+    color: #64748b;
+}
+
+#cancel-doctype:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
 /* ========== 媒体工具栏样式 ========== */
 
 .media-toolbar {
@@ -1096,6 +1155,272 @@ body.is-longpress .pointer {
     background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%);
     border-radius: 4px;
     transition: width 0.3s ease;
+}
+
+/* ========== 编辑器内表格样式 ========== */
+
+.ProseMirror table {
+    border-collapse: collapse;
+    margin: 16px 0;
+    width: 100%;
+    overflow: auto;
+}
+
+.ProseMirror table td,
+.ProseMirror table th {
+    border: 2px solid #ced4da;
+    padding: 8px 12px;
+    min-width: 60px;
+    vertical-align: top;
+}
+
+.ProseMirror table th {
+    background: #f1f3f5;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.ProseMirror .selectedCell {
+    background: rgba(14, 165, 233, 0.1);
+}
+
+/* ========== 编辑器内代码块样式 ========== */
+
+.ProseMirror pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.ProseMirror pre code {
+    color: inherit;
+    background: none;
+    padding: 0;
+}
+
+/* 不同语言不同背景色 */
+.ProseMirror pre[data-language="python"]      { background: #0d1b2a; }
+.ProseMirror pre[data-language="javascript"]   { background: #1a1a0a; }
+.ProseMirror pre[data-language="typescript"]   { background: #0a1a2a; }
+.ProseMirror pre[data-language="html"]         { background: #1a0a0a; }
+.ProseMirror pre[data-language="css"]          { background: #0a0a1a; }
+.ProseMirror pre[data-language="json"]         { background: #1a1a1a; }
+.ProseMirror pre[data-language="sql"]          { background: #0a1a1a; }
+.ProseMirror pre[data-language="bash"]         { background: #111111; }
+.ProseMirror pre[data-language="java"]         { background: #1a1408; }
+.ProseMirror pre[data-language="rust"]         { background: #1a0e08; }
+.ProseMirror pre[data-language="go"]           { background: #0a1a2a; }
+.ProseMirror pre[data-language="cpp"]          { background: #0d0d2a; }
+.ProseMirror pre[data-language="php"]          { background: #0d0d2a; }
+.ProseMirror pre[data-language="ruby"]         { background: #1a080a; }
+.ProseMirror pre[data-language="yaml"]         { background: #1a1a0a; }
+.ProseMirror pre[data-language="markdown"]     { background: #1a1a1e; }
+.ProseMirror pre[data-language="text"]         { background: #1e1e2e; }
+
+/* ========== 预览按钮 ========== */
+
+.btn-outline {
+    padding: 5px 14px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 2px solid #d1d5db;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+}
+
+.btn-outline:hover {
+    border-color: #8b5cf6;
+    color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.04);
+}
+
+.btn-outline.active {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: white;
+    border-color: transparent;
+}
+
+/* Markdown 预览面板 */
+.markdown-preview-panel {
+    padding: 32px 40px;
+    line-height: 1.8;
+    font-size: 16px;
+    color: #24292e;
+    background: #fff;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    min-height: 400px;
+    max-height: 70vh;
+    overflow-y: auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.markdown-preview-panel h1 {
+    font-size: 2em;
+    margin: 24px 0 16px;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid #eaecef;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #1a1a2e;
+    background: none;
+    -webkit-background-clip: unset;
+    -webkit-text-fill-color: #1a1a2e;
+    background-clip: unset;
+    text-align: left;
+    text-shadow: none;
+    letter-spacing: normal;
+}
+
+.markdown-preview-panel h2 {
+    font-size: 1.5em;
+    margin: 24px 0 16px;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid #eaecef;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #1a1a2e;
+    background: none;
+    -webkit-background-clip: unset;
+    -webkit-text-fill-color: initial;
+    background-clip: unset;
+    text-shadow: none;
+}
+
+.markdown-preview-panel h3 {
+    font-size: 1.25em;
+    margin: 24px 0 16px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #1a1a2e;
+    background: none;
+    -webkit-text-fill-color: initial;
+    text-shadow: none;
+}
+
+.markdown-preview-panel h4 {
+    font-size: 1em;
+    margin: 24px 0 16px;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.markdown-preview-panel h5,
+.markdown-preview-panel h6 {
+    font-size: 0.875em;
+    margin: 24px 0 16px;
+    font-weight: 600;
+    color: #4a4a6a;
+}
+
+.markdown-preview-panel p {
+    margin: 0 0 16px;
+}
+
+.markdown-preview-panel pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.markdown-preview-panel pre code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+}
+
+.markdown-preview-panel code:not(pre code) {
+    background: rgba(27, 31, 35, 0.05);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 85%;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    color: #e83e8c;
+}
+
+.markdown-preview-panel table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 16px;
+    display: block;
+    overflow-x: auto;
+}
+
+.markdown-preview-panel table th,
+.markdown-preview-panel table td {
+    border: 1px solid #dfe2e5;
+    padding: 6px 13px;
+    text-align: left;
+}
+
+.markdown-preview-panel table th {
+    background: #f6f8fa;
+    font-weight: 600;
+}
+
+.markdown-preview-panel table tr:nth-child(2n) {
+    background: #f6f8fa;
+}
+
+.markdown-preview-panel table tr {
+    background: #fff;
+}
+
+.markdown-preview-panel blockquote {
+    border-left: 4px solid #dfe2e5;
+    padding: 0 16px;
+    color: #6a737d;
+    margin: 0 0 16px;
+}
+
+.markdown-preview-panel ul,
+.markdown-preview-panel ol {
+    padding-left: 2em;
+    margin: 0 0 16px;
+}
+
+.markdown-preview-panel li {
+    margin: 4px 0;
+}
+
+.markdown-preview-panel img {
+    max-width: 100%;
+    border-radius: 4px;
+}
+
+.markdown-preview-panel video {
+    max-width: 100%;
+    border-radius: 4px;
+}
+
+.markdown-preview-panel a {
+    color: #0366d6;
+    text-decoration: none;
+}
+
+.markdown-preview-panel a:hover {
+    text-decoration: underline;
+}
+
+.markdown-preview-panel hr {
+    border: 0;
+    border-top: 1px solid #e1e4e8;
+    margin: 24px 0;
 }
 
 /* 响应式设计 */

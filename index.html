@@ -41,6 +41,7 @@
             <span id="current-doc-name">当前文档: my-document</span>
             <div class="header-actions">
                 <button id="save-btn" class="btn btn-success">保存</button>
+                <button id="markdown-preview-btn" class="btn btn-sm btn-outline" title="预览模式">👁️ 预览</button>
                 <div class="export-group" style="display: inline-flex; gap: 5px; margin-left: 10px;">
                     <select id="export-format" style="padding: 5px 10px; border-radius: 4px; border: 1px solid #ccc;">
                         <option value="html">HTML</option>
@@ -94,6 +95,29 @@
             <div class="modal-actions">
                 <button id="confirm-rename">确定</button>
                 <button id="cancel-rename">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文档类型选择弹窗 -->
+    <div id="doctype-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3>选择文档类型</h3>
+            <p style="color: #666; margin-bottom: 20px;">请选择要创建的文档类型</p>
+            <div class="doctype-options">
+                <button id="doctype-markdown" class="btn doctype-option">
+                    <span class="doctype-icon">📝</span>
+                    <span class="doctype-label">Markdown 文档</span>
+                    <span class="doctype-desc">支持源码编辑 + 预览渲染，表格/代码块/标题等格式</span>
+                </button>
+                <button id="doctype-normal" class="btn doctype-option">
+                    <span class="doctype-icon">📄</span>
+                    <span class="doctype-label">普通文档</span>
+                    <span class="doctype-desc">所见即所得，输入 # 自动转为标题，无预览模式</span>
+                </button>
+            </div>
+            <div class="modal-actions" style="margin-top: 10px;">
+                <button id="cancel-doctype">取消</button>
             </div>
         </div>
     </div>

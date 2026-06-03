@@ -1,6 +1,18 @@
 import { Editor, Mark } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
+import { Table } from '@tiptap/extension-table'
+import TableRow from '@tiptap/extension-table-row'
+import TableCell from '@tiptap/extension-table-cell'
+import TableHeader from '@tiptap/extension-table-header'
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import Heading from '@tiptap/extension-heading'
+import Blockquote from '@tiptap/extension-blockquote'
+import BulletList from '@tiptap/extension-bullet-list'
+import OrderedList from '@tiptap/extension-ordered-list'
+import ListItem from '@tiptap/extension-list-item'
+import HorizontalRule from '@tiptap/extension-horizontal-rule'
+import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement, updateOnlineUsersList } from './beautify.js'
@@ -8,6 +20,90 @@ import { initChatModule, setupChat, setupChatSync, resetChatMessages, updateUser
 import { CollaborativeImage, CollaborativeVideo } from './media/media-extension.js'
 import { ChunkedUploader } from './media/chunked-uploader.js'
 import { exportDocumentWithMedia } from './media/export-utils.js'
+import MarkdownIt from 'markdown-it'
+
+const md = new MarkdownIt({
+    html: true,
+    breaks: true,
+    linkify: true,
+    typographer: true,
+})
+
+const lowlight = createLowlight(common)
+
+// 创建无输入规则的扩展，编辑区保持原始 Markdown 语法（预览时才渲染）
+const HeadingRaw = Heading.extend({ addInputRules() { return [] } })
+const BlockquoteRaw = Blockquote.extend({ addInputRules() { return [] } })
+const BulletListRaw = BulletList.extend({ addInputRules() { return [] } })
+const OrderedListRaw = OrderedList.extend({ addInputRules() { return [] } })
+const HorizontalRuleRaw = HorizontalRule.extend({ addInputRules() { return [] } })
+
+// 从编辑器文档提取 Markdown 文本（处理所有节点类型）
+function getEditorMarkdown(editor) {
+    const doc = editor.state.doc
+    const lines = []
+
+    doc.content.forEach((node) => {
+        const type = node.type.name
+
+        if (type === 'paragraph') {
+            lines.push(node.textContent)
+        } else if (type === 'heading') {
+            const level = node.attrs.level || 1
+            lines.push('#'.repeat(level) + ' ' + node.textContent)
+        } else if (type === 'bulletList') {
+            node.content.forEach((item) => {
+                lines.push('- ' + item.textContent)
+            })
+        } else if (type === 'orderedList') {
+            node.content.forEach((item, i) => {
+                lines.push((i + 1) + '. ' + item.textContent)
+            })
+        } else if (type === 'blockquote') {
+            node.content.forEach((child) => {
+                if (child.type.name === 'paragraph') {
+                    lines.push('> ' + child.textContent)
+                }
+            })
+        } else if (type === 'codeBlock') {
+            const lang = node.attrs.language || ''
+            lines.push('```' + lang)
+            lines.push(node.textContent)
+            lines.push('```')
+        } else if (type === 'horizontalRule') {
+            lines.push('---')
+        } else if (type === 'table') {
+            const rows = []
+            node.content.forEach((row) => {
+                const cells = []
+                row.content.forEach((cell) => {
+                    cells.push(cell.textContent.trim())
+                })
+                rows.push('| ' + cells.join(' | ') + ' |')
+            })
+            if (rows.length > 0) {
+                lines.push(rows[0])
+                const colCount = rows[0].split('|').length - 2
+                const sep = '|' + Array(colCount).fill('------').join('|') + '|'
+                lines.push(sep)
+                for (let i = 1; i < rows.length; i++) {
+                    lines.push(rows[i])
+                }
+            }
+        } else if (type === 'collaborativeImage') {
+            const src = node.attrs.src || ''
+            const alt = node.attrs.alt || ''
+            const fingerprint = node.attrs.fingerprint || ''
+            lines.push(`<img src="${src}" alt="${alt}" data-collaborative-image="${fingerprint}" loading="lazy">`)
+        } else if (type === 'collaborativeVideo') {
+            const src = node.attrs.src || ''
+            const fingerprint = node.attrs.fingerprint || ''
+            lines.push(`<div data-collaborative-video="${fingerprint}"><video src="${src}" controls preload="metadata"></video></div>`)
+        }
+    })
+
+    return lines.join('\n')
+}
 
 // 从 localStorage 获取保存的用户名，如果没有则生成随机用户名
 const savedUserName = localStorage.getItem('onlineEditorUserName')
@@ -117,6 +213,7 @@ let editor = null
 let provider = null
 let ydoc = null
 let currentDocumentName = 'test_document'  // 默认文档名称
+let currentDocType = 'markdown'  // 当前文档类型: 'markdown' | 'normal'
 let saveTimeout = null  // 用于前端防抖保存提示
 let isEditorCreated = false  // 防止重复创建编辑器
 let isComposing = false  // 标记是否正在输入法组合输入（如拼音）
@@ -125,10 +222,18 @@ let previousUsers = new Set()  // 跟踪之前的用户列表，用于检测加�
 let autoSaveNotificationTimeout = null  // 用于防抖自动保存通知
 let hasShownConnectedMessage = false  // 标记是否已显示连接成功消息
 
-async function initEditor(documentName) {
-    console.log('=== Initializing editor for document:', documentName, '===')
+async function initEditor(documentName, docType = 'markdown') {
+    console.log('=== Initializing editor for document:', documentName, 'type:', docType, '===')
     
-    // 重置编辑器创建标志
+    // 保存文档类型
+    currentDocType = docType
+    
+    // 更新预览按钮可见性
+    const previewBtn = document.getElementById('markdown-preview-btn')
+    if (previewBtn) {
+        previewBtn.style.display = docType === 'markdown' ? '' : 'none'
+    }
+    
     isEditorCreated = false
     // 重置连接消息标志，允许在新文档中显示连接成功消息
     hasShownConnectedMessage = false
@@ -159,6 +264,37 @@ async function initEditor(documentName) {
     updateConnectionStatus('connecting')
     
     ydoc = new Y.Doc()
+    
+    // 存储/读取文档类型到 Yjs 元数据（同步到其他用户）
+    const metadata = ydoc.getMap('_metadata')
+    // 仅在元数据中没有 docType 时设置（新文档），已有则从服务器同步中获取
+    if (!metadata.has('docType')) {
+        metadata.set('docType', docType)
+    } else {
+        // 从同步的元数据中读取文档类型
+        const syncedType = metadata.get('docType')
+        if (syncedType && syncedType !== docType) {
+            docType = syncedType
+            currentDocType = syncedType
+            // 更新预览按钮可见性
+            const previewBtn = document.getElementById('markdown-preview-btn')
+            if (previewBtn) {
+                previewBtn.style.display = docType === 'markdown' ? '' : 'none'
+            }
+        }
+    }
+    
+    // 监听元数据变化（其他用户修改文档类型时同步）
+    metadata.observe(() => {
+        const syncedType = metadata.get('docType')
+        if (syncedType && syncedType !== currentDocType) {
+            currentDocType = syncedType
+            const previewBtn = document.getElementById('markdown-preview-btn')
+            if (previewBtn) {
+                previewBtn.style.display = syncedType === 'markdown' ? '' : 'none'
+            }
+        }
+    })
     
     // 监听 Yjs 文档变化，显示保存状态提示
     ydoc.on('update', (update, origin) => {
@@ -212,14 +348,14 @@ async function initEditor(documentName) {
                     )
                     hasShownConnectedMessage = true
                 }
-                // 等待 awareness 完全初始化后再创建编辑器
+                // 兜底：如果 3 秒内 onSynced 未触发，直接创建编辑器
                 setTimeout(() => {
                     if (!isEditorCreated) {
-                        console.log('>>> Creating editor for the first time...')
+                        console.log('>>> Creating editor (fallback), docType:', docType)
                         isEditorCreated = true
-                        createEditor()
+                        createEditor(docType)
                     }
-                }, 100)
+                }, 3000)
             } else if (status === 'disconnected') {
                 console.log('>>> Disconnected')
                 updateConnectionStatus('disconnected')
@@ -236,6 +372,25 @@ async function initEditor(documentName) {
         onSynced: () => {
             console.log('>>> Document synced with server')
             updateConnectionStatus('connected')
+            
+            // 同步完成后检查元数据中的文档类型
+            const metadata = ydoc.getMap('_metadata')
+            const syncedType = metadata.get('docType')
+            if (syncedType && syncedType !== currentDocType) {
+                currentDocType = syncedType
+                docType = syncedType
+                const previewBtn = document.getElementById('markdown-preview-btn')
+                if (previewBtn) {
+                    previewBtn.style.display = syncedType === 'markdown' ? '' : 'none'
+                }
+            }
+            
+            // 首次同步后创建编辑器（确保元数据已同步）
+            if (!isEditorCreated) {
+                console.log('>>> Creating editor (after sync), docType:', docType)
+                isEditorCreated = true
+                setTimeout(() => createEditor(docType), 100)
+            }
         },
         onConnect: () => {
             console.log('>>> WebSocket connected')
@@ -305,8 +460,9 @@ async function initEditor(documentName) {
     }
 }
 
-function createEditor() {
-    console.log('Creating Tiptap editor...')
+function createEditor(docType = 'markdown') {
+    const isMarkdown = docType === 'markdown'
+    console.log('Creating Tiptap editor... (docType:', docType, ')')
     
     // 确保 provider、awareness 和 document 都已初始化
     if (!provider || !provider.awareness || !provider.document) {
@@ -341,12 +497,39 @@ function createEditor() {
             element: document.querySelector('#editor'),
             extensions: [
                 StarterKit.configure({
-                    // Collaboration 扩展自带历史支持，所以禁用 StarterKit 的历史
-                    history: false
+                    history: false,
+                    codeBlock: false,
+                    // Markdown 文档禁用自动转换，普通文档启用
+                    heading: isMarkdown ? false : {},
+                    blockquote: isMarkdown ? false : {},
+                    bulletList: isMarkdown ? false : {},
+                    orderedList: isMarkdown ? false : {},
+                    horizontalRule: isMarkdown ? false : {},
                 }),
+                // Markdown 文档用无输入规则版本（保留节点但不自动转换）
+                ...(isMarkdown ? [HeadingRaw, BlockquoteRaw, BulletListRaw, OrderedListRaw, ListItem, HorizontalRuleRaw] : []),
                 UserHighlight,
                 CollaborativeImage,
                 CollaborativeVideo,
+                Table.configure({
+                    resizable: true,
+                }),
+                TableRow,
+                TableCell,
+                TableHeader,
+                CodeBlockLowlight.extend({
+                    ...(isMarkdown ? { addInputRules() { return [] } } : {}),
+                    renderHTML({ node, HTMLAttributes }) {
+                        const lang = node.attrs.language || 'text'
+                        return [
+                            'pre',
+                            { ...HTMLAttributes, 'data-language': lang },
+                            ['code', {}, 0],
+                        ]
+                    },
+                }).configure({
+                    lowlight,
+                }),
                 Collaboration.configure({
                     document: provider.document,
                     field: 'content'
@@ -596,11 +779,40 @@ function setupEventListeners() {
     document.getElementById('create-doc').addEventListener('click', async () => {
         const docName = document.getElementById('document-name').value.trim()
         if (docName) {
-            await initEditor(docName)
-            document.getElementById('document-name').value = ''
+            // 显示文档类型选择弹窗
+            window._pendingDocName = docName
+            document.getElementById('doctype-modal').style.display = 'flex'
         } else {
             alert('请输入文档名称')
         }
+    })
+    
+    // 文档类型选择：Markdown
+    document.getElementById('doctype-markdown')?.addEventListener('click', async () => {
+        document.getElementById('doctype-modal').style.display = 'none'
+        const docName = window._pendingDocName
+        if (docName) {
+            await initEditor(docName, 'markdown')
+            document.getElementById('document-name').value = ''
+            window._pendingDocName = null
+        }
+    })
+    
+    // 文档类型选择：普通
+    document.getElementById('doctype-normal')?.addEventListener('click', async () => {
+        document.getElementById('doctype-modal').style.display = 'none'
+        const docName = window._pendingDocName
+        if (docName) {
+            await initEditor(docName, 'normal')
+            document.getElementById('document-name').value = ''
+            window._pendingDocName = null
+        }
+    })
+    
+    // 取消文档类型选择
+    document.getElementById('cancel-doctype')?.addEventListener('click', () => {
+        document.getElementById('doctype-modal').style.display = 'none'
+        window._pendingDocName = null
     })
     
     document.getElementById('open-doc').addEventListener('click', async () => {
@@ -1107,9 +1319,73 @@ function setupMediaUpload() {
     })
 }
 
+// ========== Markdown 工具栏 ==========
+
+function setupMarkdownToolbar() {
+    let previewMode = false
+
+    // 根据文档类型显示/隐藏预览按钮
+    const previewBtn = document.getElementById('markdown-preview-btn')
+    if (previewBtn) {
+        previewBtn.style.display = currentDocType === 'markdown' ? '' : 'none'
+    }
+
+    // 创建预览面板
+    const previewPanel = document.createElement('div')
+    previewPanel.id = 'markdown-preview-panel'
+    previewPanel.className = 'markdown-preview-panel'
+    previewPanel.style.display = 'none'
+    const editorBox = document.getElementById('editor')
+    editorBox?.parentNode?.insertBefore(previewPanel, editorBox.nextSibling)
+
+    // 媒体工具栏
+    const mediaToolbar = document.getElementById('media-toolbar')
+
+    document.getElementById('markdown-preview-btn')?.addEventListener('click', () => {
+        if (!editor) return
+        previewMode = !previewMode
+        const btn = document.getElementById('markdown-preview-btn')
+
+        if (previewMode) {
+            // 提取编辑器原始 Markdown 文本，用 markdown-it 渲染为 HTML
+            const markdown = getEditorMarkdown(editor)
+            previewPanel.innerHTML = md.render(markdown)
+            editorBox.style.display = 'none'
+            previewPanel.style.display = 'block'
+            if (mediaToolbar) mediaToolbar.style.display = 'none'
+            btn.textContent = '✏️ 编辑'
+            btn.classList.add('active')
+            btn.title = '编辑模式'
+        } else {
+            // 退出预览：将编辑器富文本转为 Markdown 源文本，显示源码
+            const markdown = getEditorMarkdown(editor)
+            const html = markdown
+                .split('\n')
+                .map(line => {
+                    // 图片/视频的原始 HTML 不转义，TipTap parseHTML 会还原为协作节点
+                    if (/^<(img|div)\s/.test(line) && (line.includes('data-collaborative-image') || line.includes('data-collaborative-video'))) {
+                        return line
+                    }
+                    const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    return line ? `<p>${escaped}</p>` : '<p><br></p>'
+                })
+                .join('')
+            editor.commands.setContent(html)
+            previewPanel.style.display = 'none'
+            editorBox.style.display = ''
+            if (mediaToolbar) mediaToolbar.style.display = ''
+            editor.setEditable(true)
+            btn.textContent = '👁️ 预览'
+            btn.classList.remove('active')
+            btn.title = '预览模式'
+        }
+    })
+}
+
 async function init() {
     setupEventListeners()
     setupMediaUpload()
+    setupMarkdownToolbar()
     
     updateConnectionStatus('connecting')
     
