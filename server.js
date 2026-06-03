@@ -8,6 +8,7 @@ import * as Y from 'yjs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const onlinetextDir = path.join(__dirname, 'onlinetext')
+const snapshotsDir = path.join(__dirname, 'snapshots')
 
 const WS_PORT = 1235  // WebSocket 端口
 const HTTP_PORT = 1236  // HTTP API 端口
@@ -15,6 +16,7 @@ const HTTP_PORT = 1236  // HTTP API 端口
 console.log('Starting unified server...')
 console.log('Current directory:', __dirname)
 console.log('onlinetext directory:', onlinetextDir)
+console.log('snapshots directory:', snapshotsDir)
 
 async function ensureDirectoryExists(dir) {
     try {
@@ -197,6 +199,7 @@ function removeInactiveUserHighlights(document, activeUserIds) {
 async function startServer() {
     try {
         await ensureDirectoryExists(onlinetextDir)
+        await ensureDirectoryExists(snapshotsDir)
         console.log('Initializing servers...')
         
         // 创建独立的 HTTP 服务器处理 API 请求
@@ -298,6 +301,208 @@ async function startServer() {
                     console.error('Error cleaning up highlights:', error)
                     res.writeHead(500, { 'Content-Type': 'application/json' })
                     res.end(JSON.stringify({ error: 'Failed to cleanup highlights' }))
+                }
+                return
+            }
+            
+            // ========== 快照管理 API ==========
+            
+            // 处理 /api/snapshots 请求 - 获取快照列表
+            if (req.url.startsWith('/api/snapshots') && req.method === 'GET') {
+                try {
+                    const url = new URL(req.url, `http://${req.headers.host}`)
+                    const documentName = url.searchParams.get('documentName')
+                    
+                    let files = await fs.readdir(snapshotsDir)
+                    let snapshots = []
+                    
+                    for (const file of files) {
+                        if (file.endsWith('.json')) {
+                            try {
+                                const filePath = path.join(snapshotsDir, file)
+                                const content = await fs.readFile(filePath, 'utf8')
+                                const snapshot = JSON.parse(content)
+                                
+                                // 如果指定了文档名称，过滤
+                                if (!documentName || snapshot.documentName === documentName) {
+                                    snapshots.push(snapshot)
+                                }
+                            } catch (error) {
+                                console.error('Error reading snapshot file:', file, error)
+                            }
+                        }
+                    }
+                    
+                    // 按时间倒序排列
+                    snapshots.sort((a, b) => b.timestamp - a.timestamp)
+                    
+                    console.log(`Returning ${snapshots.length} snapshots${documentName ? ` for document: ${documentName}` : ''}`)
+                    res.writeHead(200, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ snapshots }))
+                } catch (error) {
+                    console.error('Error listing snapshots:', error)
+                    res.writeHead(500, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Failed to list snapshots' }))
+                }
+                return
+            }
+            
+            // 处理 /api/snapshots/save 请求 - 保存快照
+            if (req.url.startsWith('/api/snapshots/save') && req.method === 'POST') {
+                try {
+                    let body = ''
+                    req.on('data', chunk => { body += chunk })
+                    req.on('end', async () => {
+                        try {
+                            const data = JSON.parse(body)
+                            const { documentName, content, description } = data
+                            
+                            if (!documentName || !content) {
+                                res.writeHead(400, { 'Content-Type': 'application/json' })
+                                res.end(JSON.stringify({ error: 'documentName and content are required' }))
+                                return
+                            }
+                            
+                            const snapshotId = `snapshot-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+                            const snapshot = {
+                                id: snapshotId,
+                                documentName,
+                                content,
+                                description: description || `快照 - ${new Date().toLocaleString('zh-CN')}`,
+                                timestamp: Date.now(),
+                                createdAt: new Date().toISOString()
+                            }
+                            
+                            const filePath = path.join(snapshotsDir, `${snapshotId}.json`)
+                            await fs.writeFile(filePath, JSON.stringify(snapshot), 'utf8')
+                            
+                            console.log('✅ Snapshot saved:', snapshotId, 'for document:', documentName)
+                            res.writeHead(200, { 'Content-Type': 'application/json' })
+                            res.end(JSON.stringify({ success: true, snapshot }))
+                        } catch (error) {
+                            console.error('Error saving snapshot:', error)
+                            res.writeHead(500, { 'Content-Type': 'application/json' })
+                            res.end(JSON.stringify({ error: 'Failed to save snapshot' }))
+                        }
+                    })
+                } catch (error) {
+                    console.error('Error processing snapshot save:', error)
+                    res.writeHead(500, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Failed to process snapshot' }))
+                }
+                return
+            }
+            
+            // 处理 /api/snapshots/load 请求 - 加载快照
+            if (req.url.startsWith('/api/snapshots/load') && req.method === 'GET') {
+                const url = new URL(req.url, `http://${req.headers.host}`)
+                const snapshotId = url.searchParams.get('id')
+                
+                if (!snapshotId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Snapshot id is required' }))
+                    return
+                }
+                
+                try {
+                    const filePath = path.join(snapshotsDir, `${snapshotId}.json`)
+                    const content = await fs.readFile(filePath, 'utf8')
+                    const snapshot = JSON.parse(content)
+                    
+                    console.log('📄 Snapshot loaded:', snapshotId)
+                    res.writeHead(200, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ snapshot }))
+                } catch (error) {
+                    if (error.code === 'ENOENT') {
+                        res.writeHead(404, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ error: 'Snapshot not found' }))
+                    } else {
+                        console.error('Error loading snapshot:', error)
+                        res.writeHead(500, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ error: 'Failed to load snapshot' }))
+                    }
+                }
+                return
+            }
+            
+            // 处理 /api/snapshots/delete 请求 - 删除快照
+            if (req.url.startsWith('/api/snapshots/delete') && req.method === 'DELETE') {
+                const url = new URL(req.url, `http://${req.headers.host}`)
+                const snapshotId = url.searchParams.get('id')
+                
+                if (!snapshotId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Snapshot id is required' }))
+                    return
+                }
+                
+                try {
+                    const filePath = path.join(snapshotsDir, `${snapshotId}.json`)
+                    await fs.unlink(filePath)
+                    
+                    console.log('🗑️ Snapshot deleted:', snapshotId)
+                    res.writeHead(200, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ success: true, message: 'Snapshot deleted successfully' }))
+                } catch (error) {
+                    if (error.code === 'ENOENT') {
+                        res.writeHead(404, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ error: 'Snapshot not found' }))
+                    } else {
+                        console.error('Error deleting snapshot:', error)
+                        res.writeHead(500, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ error: 'Failed to delete snapshot' }))
+                    }
+                }
+                return
+            }
+            
+            // 处理 /api/snapshots/compare 请求 - 对比两个快照
+            if (req.url.startsWith('/api/snapshots/compare') && req.method === 'GET') {
+                const url = new URL(req.url, `http://${req.headers.host}`)
+                const id1 = url.searchParams.get('id1')
+                const id2 = url.searchParams.get('id2')
+                
+                if (!id1 || !id2) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Both id1 and id2 are required' }))
+                    return
+                }
+                
+                try {
+                    const filePath1 = path.join(snapshotsDir, `${id1}.json`)
+                    const filePath2 = path.join(snapshotsDir, `${id2}.json`)
+                    
+                    const content1 = await fs.readFile(filePath1, 'utf8')
+                    const content2 = await fs.readFile(filePath2, 'utf8')
+                    
+                    const snap1 = JSON.parse(content1)
+                    const snap2 = JSON.parse(content2)
+                    
+                    // 简单对比：返回两个快照的差异信息
+                    const diff = {
+                        snapshot1: {
+                            id: snap1.id,
+                            timestamp: snap1.timestamp,
+                            description: snap1.description
+                        },
+                        snapshot2: {
+                            id: snap2.id,
+                            timestamp: snap2.timestamp,
+                            description: snap2.description
+                        },
+                        size1: snap1.content?.length || 0,
+                        size2: snap2.content?.length || 0,
+                        sizeDiff: (snap2.content?.length || 0) - (snap1.content?.length || 0),
+                        timestampDiff: snap2.timestamp - snap1.timestamp
+                    }
+                    
+                    console.log('🔍 Snapshots compared:', id1, 'vs', id2)
+                    res.writeHead(200, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ diff }))
+                } catch (error) {
+                    console.error('Error comparing snapshots:', error)
+                    res.writeHead(500, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Failed to compare snapshots' }))
                 }
                 return
             }

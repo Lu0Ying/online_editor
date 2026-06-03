@@ -770,26 +770,54 @@ body.is-longpress .pointer {
 /* 聊天室样式 */
 .chat-panel {
     position: fixed;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
     width: 320px;
     height: 500px;
     background: var(--card-gradient);
-    border-radius: 16px 0 0 16px;
-    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.8);
-    border-right: none;
     z-index: 1000;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: all var(--transition-normal);
+    transition: width 0.3s ease, border-radius 0.3s ease;
+    user-select: none;
 }
 
+/* 拖动状态 */
+.chat-panel.dragging {
+    opacity: 0.9;
+    cursor: grabbing;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    transition: none;
+}
+
+/* 浮动状态（不靠边） */
+.chat-panel.floating {
+    border-radius: 16px;
+}
+
+/* 吸附状态 */
+.chat-panel.snapped {
+    border-radius: 16px 0 0 16px;
+}
+
+.chat-panel.snapped.snap-left {
+    border-radius: 0 16px 16px 0;
+}
+
+.chat-panel.snapped.snap-right {
+    border-radius: 16px 0 0 16px;
+}
+
+/* 收起状态 */
 .chat-panel.collapsed {
     width: 48px;
-    border-radius: 8px 0 0 8px;
+}
+
+.chat-panel.collapsed.snap-left,
+.chat-panel.collapsed.snap-right {
+    border-radius: 8px;
 }
 
 .chat-header {
@@ -799,13 +827,25 @@ body.is-longpress .pointer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    cursor: pointer;
-    border-radius: 16px 0 0 0;
+    cursor: grab;
+    border-radius: 16px 16px 0 0;
     position: relative;
 }
 
+.chat-panel.snapped.snap-right .chat-header {
+    border-radius: 16px 0 0 0;
+}
+
+.chat-panel.snapped.snap-left .chat-header {
+    border-radius: 0 16px 0 0;
+}
+
+.chat-panel.dragging .chat-header {
+    cursor: grabbing;
+}
+
 .chat-panel.collapsed .chat-header {
-    border-radius: 8px 0 0 8px;
+    border-radius: 8px;
     padding: 0;
     justify-content: center;
     min-height: 100%;
@@ -824,7 +864,7 @@ body.is-longpress .pointer {
 
 /* 收起状态显示"聊天室"文字 */
 .chat-panel.collapsed .chat-header::before {
-    content: '聊\A天\A室';
+    content: '\804A\A\5929\A\5BA4';
     position: absolute;
     top: 50%;
     left: 50%;
@@ -838,47 +878,100 @@ body.is-longpress .pointer {
 }
 
 .chat-toggle {
-    font-size: 12px;
-    opacity: 0.8;
+    font-size: 1em;
+    opacity: 0;
     transition: all var(--transition-normal);
-    width: 24px;
-    height: 24px;
+    width: 100px;
+    height: 41px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
+    border-radius: 6px;
+    padding: 4px;
 }
 
-/* 打开状态：箭头向右，悬停时旋转变成向左，表示点击可以收起 */
+/* 打开状态：显示"收起"文字 */
 .chat-panel:not(.collapsed) .chat-toggle {
-    content: '›';
+    font-weight: 500;
+    opacity: 0.8;
+}
+
+.chat-panel:not(.collapsed) .chat-toggle::after {
+    content: '\6536\8D77';
 }
 
 .chat-panel:not(.collapsed) .chat-toggle:hover {
     background: rgba(255, 255, 255, 0.3);
-    transform: rotate(180deg);
+    opacity: 1;
 }
 
-/* 收起状态：箭头向左，表示点击可以展开 */
-.chat-panel.collapsed .chat-toggle {
+/* 收起状态：右侧吸附时，按钮在左边 */
+.chat-panel.collapsed.snap-right .chat-toggle {
     position: absolute;
     top: 50%;
-    left: -12px;
-    transform: translateY(-50%) rotate(180deg);
-    background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%);
-    box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.2);
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
-    opacity: 1;
+    left: -8px;
+    transform: translateY(-50%);
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    width: 16px;
+    height: 60px;
+    font-size: 0;
+    opacity: 0.8;
     cursor: pointer;
+    font-weight: normal;
+    border-left: 2px solid rgba(255, 255, 255, 0.6);
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
 }
 
-.chat-panel.collapsed .chat-toggle:hover {
-    transform: translateY(-50%) rotate(180deg) scale(1.1);
-    box-shadow: -3px 3px 12px rgba(0, 0, 0, 0.3);
+.chat-panel.collapsed.snap-right .chat-toggle::after {
+    content: '';
+}
+
+.chat-panel.collapsed.snap-right .chat-toggle:hover {
+    transform: translateY(-50%);
+    opacity: 1;
+    border-left-color: rgba(255, 255, 255, 0.9);
+}
+
+/* 收起状态：左侧吸附时，按钮在右边 */
+.chat-panel.collapsed.snap-left .chat-toggle {
+    position: absolute;
+    top: 50%;
+    right: -8px;
+    left: auto;
+    transform: translateY(-50%);
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    width: 16px;
+    height: 60px;
+    font-size: 0;
+    opacity: 0.8;
+    cursor: pointer;
+    font-weight: normal;
+    border-right: 2px solid rgba(255, 255, 255, 0.6);
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-panel.collapsed.snap-left .chat-toggle::after {
+    content: '';
+}
+
+.chat-panel.collapsed.snap-left .chat-toggle:hover {
+    transform: translateY(-50%);
+    opacity: 1;
+    border-right-color: rgba(255, 255, 255, 0.9);
+}
+
+/* 调整大小状态 */
+.chat-panel.resizing {
+    transition: 0.0s;
+    opacity: 0.9;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
 .chat-messages {
