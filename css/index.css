@@ -718,6 +718,7 @@ body.is-longpress .pointer {
     top: 50%;
     transform: translateY(-50%);
     width: 320px;
+    height: 500px;
     background: var(--card-gradient);
     border-radius: 16px 0 0 16px;
     box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
@@ -726,13 +727,13 @@ body.is-longpress .pointer {
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    max-height: 70vh;
     overflow: hidden;
     transition: all var(--transition-normal);
 }
 
 .chat-panel.collapsed {
     width: 48px;
+    border-radius: 8px 0 0 8px;
 }
 
 .chat-header {
@@ -743,6 +744,16 @@ body.is-longpress .pointer {
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
+    border-radius: 16px 0 0 0;
+    position: relative;
+}
+
+.chat-panel.collapsed .chat-header {
+    border-radius: 8px 0 0 8px;
+    padding: 0;
+    justify-content: center;
+    min-height: 100%;
+    background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%);
 }
 
 .chat-header h3 {
@@ -751,18 +762,67 @@ body.is-longpress .pointer {
     font-weight: 600;
 }
 
-.chat-toggle {
-    font-size: 10px;
-    opacity: 0.8;
-    transition: transform var(--transition-normal);
-}
-
-.chat-panel.collapsed .chat-toggle {
-    transform: rotate(-90deg);
-}
-
 .chat-panel.collapsed .chat-header h3 {
     display: none;
+}
+
+/* 收起状态显示"聊天室"文字 */
+.chat-panel.collapsed .chat-header::before {
+    content: '聊\A天\A室';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+    font-weight: 600;
+    white-space: pre;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.chat-toggle {
+    font-size: 12px;
+    opacity: 0.8;
+    transition: all var(--transition-normal);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+}
+
+/* 打开状态：箭头向右，悬停时旋转变成向左，表示点击可以收起 */
+.chat-panel:not(.collapsed) .chat-toggle {
+    content: '›';
+}
+
+.chat-panel:not(.collapsed) .chat-toggle:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(180deg);
+}
+
+/* 收起状态：箭头向左，表示点击可以展开 */
+.chat-panel.collapsed .chat-toggle {
+    position: absolute;
+    top: 50%;
+    left: -12px;
+    transform: translateY(-50%) rotate(180deg);
+    background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%);
+    box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+    opacity: 1;
+    cursor: pointer;
+}
+
+.chat-panel.collapsed .chat-toggle:hover {
+    transform: translateY(-50%) rotate(180deg) scale(1.1);
+    box-shadow: -3px 3px 12px rgba(0, 0, 0, 0.3);
 }
 
 .chat-messages {
@@ -772,6 +832,12 @@ body.is-longpress .pointer {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    transition: all var(--transition-normal);
+}
+
+/* 收起状态隐藏消息和输入区域 */
+.chat-panel.collapsed .chat-messages {
+    display: none;
 }
 
 .chat-message {
@@ -817,6 +883,12 @@ body.is-longpress .pointer {
     border-top: 1px solid #e9e5ff;
     display: flex;
     gap: 10px;
+    transition: all var(--transition-normal);
+}
+
+/* 收起状态隐藏输入区域 */
+.chat-panel.collapsed .chat-input-area {
+    display: none;
 }
 
 .chat-input-area input {
