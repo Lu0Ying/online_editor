@@ -8,6 +8,7 @@ import { initChatModule, setupChat, setupChatSync, resetChatMessages, updateUser
 import { CollaborativeImage, CollaborativeVideo } from './media/media-extension.js'
 import { ChunkedUploader } from './media/chunked-uploader.js'
 import { exportDocumentWithMedia } from './media/export-utils.js'
+import { initVersionManagerUI, showVersionPanel, versionManager } from './version-manager.js'
 
 // 从 localStorage 获取保存的用户名，如果没有则生成随机用户名
 const savedUserName = localStorage.getItem('onlineEditorUserName')
@@ -149,16 +150,19 @@ async function initEditor(documentName) {
         console.log('Destroying existing ydoc...')
         ydoc.destroy()
         ydoc = null
+        window.ydoc = null  // 清除全局引用
     }
     
     // 重置聊天消息
     resetChatMessages()
     
     currentDocumentName = documentName
+    window.currentDocumentName = documentName  // 暴露给版本管理模块
     
     updateConnectionStatus('connecting')
     
     ydoc = new Y.Doc()
+    window.ydoc = ydoc  // 暴露给版本管理模块
     
     // 监听 Yjs 文档变化，显示保存状态提示
     ydoc.on('update', (update, origin) => {
@@ -437,6 +441,8 @@ function createEditor() {
             }
         })
         
+        window.editor = editor  // 暴露给版本管理模块
+        
         setTimeout(() => {
             if (editor) {
                 editor.commands.focus()
@@ -519,8 +525,10 @@ async function deleteDocument(documentName) {
             if (ydoc) {
                 ydoc.destroy()
                 ydoc = null
+                window.ydoc = null  // 清除全局引用
             }
             currentDocumentName = 'test_document'
+            window.currentDocumentName = 'test_document'  // 更新全局引用
             const docNameElement = document.getElementById('current-doc-name')
             if (docNameElement) {
                 docNameElement.textContent = '当前文档: test_document'
@@ -589,6 +597,14 @@ async function renderRecentDocuments(docs) {
             await initEditor(doc)
         })
         list.appendChild(li)
+    })
+}
+
+function setupVersionManager() {
+    initVersionManagerUI()
+    
+    document.getElementById('version-btn').addEventListener('click', () => {
+        showVersionPanel()
     })
 }
 
@@ -1110,6 +1126,7 @@ function setupMediaUpload() {
 async function init() {
     setupEventListeners()
     setupMediaUpload()
+    setupVersionManager()
     
     updateConnectionStatus('connecting')
     
