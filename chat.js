@@ -62,8 +62,17 @@ export function setupChat() {
     const chatPanel = document.getElementById('chat-panel')
     const chatToggle = document.getElementById('chat-toggle')
     
-    chatToggle.addEventListener('click', () => {
+    // 点击 toggle 按钮始终切换状态
+    chatToggle.addEventListener('click', (e) => {
+        e.stopPropagation() // 阻止事件冒泡
         chatPanel.classList.toggle('collapsed')
+    })
+    
+    // 点击面板：收起状态时展开，打开状态时不处理（避免误触）
+    chatPanel.addEventListener('click', () => {
+        if (chatPanel.classList.contains('collapsed')) {
+            chatPanel.classList.remove('collapsed')
+        }
     })
     
     // 发送消息
