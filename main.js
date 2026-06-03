@@ -5,6 +5,9 @@ import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement, updateOnlineUsersList } from './beautify.js'
 import { initChatModule, setupChat, setupChatSync, resetChatMessages, updateUserInfo } from './chat.js'
+import { CollaborativeImage, CollaborativeVideo } from './media/media-extension.js'
+import { ChunkedUploader } from './media/chunked-uploader.js'
+import { exportDocumentWithMedia } from './media/export-utils.js'
 
 // 从 localStorage 获取保存的用户名，如果没有则生成随机用户名
 const savedUserName = localStorage.getItem('onlineEditorUserName')
@@ -107,6 +110,8 @@ function showSystemNotification(title, message, type = 'info', duration = 3000) 
 const serverHost = window.location.hostname
 const wsUrl = `ws://${serverHost}:1235`
 const apiUrl = `http://${serverHost}:1236`
+// 文件服务器通过 Vite 代理，使用相对路径即可跨设备访问
+export const fileServerUrl = ''
 
 let editor = null
 let provider = null
@@ -340,6 +345,8 @@ function createEditor() {
                     history: false
                 }),
                 UserHighlight,
+                CollaborativeImage,
+                CollaborativeVideo,
                 Collaboration.configure({
                     document: provider.document,
                     field: 'content'
@@ -765,7 +772,7 @@ function setupEventListeners() {
     })
     
     // 导出文档功能
-    document.getElementById('export-btn').addEventListener('click', () => {
+    document.getElementById('export-btn').addEventListener('click', async () => {
         if (!editor) {
             alert('请先打开一个文档')
             return
@@ -785,7 +792,6 @@ function setupEventListeners() {
         } else if (exportFormat === 'json') {
             // 导出 Yjs 文档状态
             const state = Y.encodeStateAsUpdate(ydoc)
-            // 使用浏览器兼容的方式转换为 base64
             const binaryString = Array.from(state, byte => String.fromCharCode(byte)).join('')
             const base64State = btoa(binaryString)
             content = JSON.stringify({
@@ -796,9 +802,42 @@ function setupEventListeners() {
             }, null, 2)
             filename = `${currentDocumentName}.json`
             mimeType = 'application/json'
+        } else if (exportFormat === 'zip') {
+            // 导出为包含媒体的压缩包
+            try {
+                showSystemNotification('导出中', '正在打包文档和媒体文件...', 'info', 3000)
+                const result = await exportDocumentWithMedia(
+                    editor.getHTML(),
+                    currentDocumentName,
+                    fileServerUrl
+                )
+                
+                const url = URL.createObjectURL(result.blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `${currentDocumentName}.zip`
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+                URL.revokeObjectURL(url)
+                
+                showSystemNotification(
+                    '导出完成',
+                    `已导出 ${result.mediaCount} 个媒体文件` + 
+                    (result.failedCount > 0 ? `，${result.failedCount} 个失败` : ''),
+                    'document-save',
+                    3000
+                )
+                console.log(`✅ Document exported as ${currentDocumentName}.zip`)
+                return
+            } catch (err) {
+                console.error('导出失败:', err)
+                alert('导出压缩包失败: ' + err.message)
+                return
+            }
         }
         
-        // 创建 Blob 并下载
+        // 创建 Blob 并下载（非 zip 格式）
         const blob = new Blob([content], { type: mimeType })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -887,8 +926,190 @@ function updateUserInfoPanel(newName) {
     }
 }
 
+// ========== 媒体上传功能 ==========
+
+function showUploadProgress(filename, progress) {
+    const percent = Math.round((progress.completed / progress.total) * 100)
+    showSystemNotification(
+        '文件上传中',
+        `${filename}: ${percent}% (${progress.completed}/${progress.total} 分块)`,
+        'info',
+        2000
+    )
+}
+
+async function handleMediaUpload(file, type) {
+    if (!editor) {
+        alert('请先打开一个文档')
+        return
+    }
+
+    // 文件类型校验
+    const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp']
+    const videoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime']
+
+    if (type === 'image' && !imageTypes.includes(file.type)) {
+        alert('请选择图片文件（支持 JPG、PNG、GIF、WebP、SVG、BMP）')
+        return
+    }
+    if (type === 'video' && !videoTypes.includes(file.type)) {
+        alert('请选择视频文件（支持 MP4、WebM、OGG、MOV）')
+        return
+    }
+
+    // 视频大小限制 500MB
+    if (type === 'video' && file.size > 500 * 1024 * 1024) {
+        alert('视频文件不能超过 500MB')
+        return
+    }
+
+    showSystemNotification('文件上传', `正在上传 ${file.name}...`, 'info', 2000)
+
+    try {
+        const uploader = new ChunkedUploader(file, {
+            fileServerUrl,
+            onProgress: (progress) => {
+                showUploadProgress(file.name, progress)
+            },
+            onComplete: (result) => {
+                // 上传完成，插入到编辑器
+                if (type === 'image') {
+                    editor.commands.insertCollaborativeImage({
+                        src: result.url,
+                        fingerprint: result.fingerprint,
+                        alt: file.name,
+                        title: file.name,
+                    })
+                } else if (type === 'video') {
+                    editor.commands.insertCollaborativeVideo({
+                        src: result.url,
+                        fingerprint: result.fingerprint,
+                        title: file.name,
+                    })
+                }
+
+                showSystemNotification(
+                    '上传完成',
+                    `${file.name} 已插入文档，协作者可同步查看`,
+                    'document-save',
+                    3000
+                )
+            },
+            onError: (err) => {
+                console.error('上传失败:', err)
+                showSystemNotification(
+                    '上传失败',
+                    `${file.name}: ${err.message}`,
+                    'warning',
+                    4000
+                )
+            }
+        })
+
+        await uploader.init()
+        await uploader.upload()
+    } catch (err) {
+        console.error('上传异常:', err)
+        showSystemNotification(
+            '上传失败',
+            `${file.name}: ${err.message}`,
+            'warning',
+            4000
+        )
+    }
+}
+
+function setupMediaUpload() {
+    // 图片上传按钮
+    const insertImageBtn = document.getElementById('insert-image-btn')
+    const imageFileInput = document.getElementById('image-file-input')
+
+    if (insertImageBtn && imageFileInput) {
+        insertImageBtn.addEventListener('click', () => {
+            imageFileInput.accept = 'image/*'
+            imageFileInput.click()
+        })
+
+        imageFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0]
+            if (file) {
+                handleMediaUpload(file, 'image')
+                imageFileInput.value = ''
+            }
+        })
+    }
+
+    // 视频上传按钮
+    const insertVideoBtn = document.getElementById('insert-video-btn')
+    const videoFileInput = document.getElementById('video-file-input')
+
+    if (insertVideoBtn && videoFileInput) {
+        insertVideoBtn.addEventListener('click', () => {
+            videoFileInput.accept = 'video/*'
+            videoFileInput.click()
+        })
+
+        videoFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0]
+            if (file) {
+                handleMediaUpload(file, 'video')
+                videoFileInput.value = ''
+            }
+        })
+    }
+
+    // 拖拽上传支持
+    const editorElement = document.querySelector('#editor')
+    if (editorElement) {
+        editorElement.addEventListener('dragover', (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+        })
+
+        editorElement.addEventListener('drop', (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+
+            const files = e.dataTransfer.files
+            if (files.length === 0) return
+
+            for (const file of files) {
+                if (file.type.startsWith('image/')) {
+                    handleMediaUpload(file, 'image')
+                } else if (file.type.startsWith('video/')) {
+                    handleMediaUpload(file, 'video')
+                }
+            }
+        })
+    }
+
+    // 粘贴图片支持
+    document.addEventListener('paste', (e) => {
+        if (!editor) return
+        
+        // 检查焦点是否在编辑器内
+        const editorDom = document.querySelector('#editor .ProseMirror')
+        if (!editorDom || !editorDom.contains(document.activeElement)) return
+
+        const items = e.clipboardData?.items
+        if (!items) return
+
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault()
+                const file = item.getAsFile()
+                if (file) {
+                    handleMediaUpload(file, 'image')
+                }
+                break
+            }
+        }
+    })
+}
+
 async function init() {
     setupEventListeners()
+    setupMediaUpload()
     
     updateConnectionStatus('connecting')
     

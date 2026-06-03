@@ -46,6 +46,7 @@
                         <option value="html">HTML</option>
                         <option value="text">纯文本</option>
                         <option value="json">JSON (Yjs)</option>
+                        <option value="zip">ZIP (含媒体)</option>
                     </select>
                     <button id="export-btn" class="btn btn-secondary">导出文档</button>
                 </div>
@@ -61,6 +62,15 @@
             </button>
         </div>
         <div id="editor" class="editor-box"></div>
+        <!-- 媒体工具栏 -->
+        <div class="media-toolbar" id="media-toolbar">
+            <button id="insert-image-btn" class="btn btn-sm btn-secondary" title="插入图片">🖼️ 插入图片</button>
+            <button id="insert-video-btn" class="btn btn-sm btn-secondary" title="插入视频">🎬 插入视频</button>
+            <span class="media-toolbar-hint">或拖拽文件到编辑器 / Ctrl+V 粘贴图片</span>
+        </div>
+        <!-- 隐藏的文件输入 -->
+        <input type="file" id="image-file-input" style="display: none;" accept="image/*" />
+        <input type="file" id="video-file-input" style="display: none;" accept="video/*" />
     </div>
 
     <!-- 聊天室面板 -->
