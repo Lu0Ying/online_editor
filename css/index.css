@@ -8,8 +8,8 @@
 /* 系统消息通知容器 */
 .system-notifications {
     position: fixed;
-    top: 20px;
-    right: 20px;
+    bottom: 20px;
+    left: 20px;
     z-index: 10000;
     display: flex;
     flex-direction: column;
@@ -34,12 +34,12 @@
 /* 消息滑入动画 */
 @keyframes slideInRight {
     from {
-        transform: translateX(400px);
+        transform: translateY(40px);
         opacity: 0;
     }
 
     to {
-        transform: translateX(0);
+        transform: translateY(0);
         opacity: 1;
     }
 }
@@ -47,12 +47,12 @@
 /* 消息滑出动画 */
 @keyframes slideOutRight {
     from {
-        transform: translateX(0);
+        transform: translateY(0);
         opacity: 1;
     }
 
     to {
-        transform: translateX(400px);
+        transform: translateY(40px);
         opacity: 0;
     }
 }
@@ -180,29 +180,234 @@
     --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* 顶部导航栏 */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 900;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 24px;
+    height: 56px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 2px 12px rgba(14, 165, 233, 0.1);
+    border-bottom: 1px solid rgba(14, 165, 233, 0.08);
+}
+
+.topbar-title {
+    font-size: 18px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.topbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(14, 165, 233, 0.08);
+    color: var(--primary-700);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+}
+
+.topbar-btn:hover {
+    background: rgba(14, 165, 233, 0.15);
+    transform: translateY(-1px);
+}
+
+.topbar-btn.active {
+    background: var(--primary-500);
+    color: white;
+}
+
+/* 文档管理展开面板 */
+.doc-manager-panel {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    z-index: 800;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(14, 165, 233, 0.15);
+    border-bottom: 1px solid rgba(14, 165, 233, 0.08);
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, padding 0.3s ease;
+    padding: 0 24px;
+}
+
+.doc-manager-panel.open {
+    max-height: 80vh;
+    overflow-y: auto;
+    opacity: 1;
+    padding: 24px;
+}
+
+.doc-manager-panel-inner {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+/* 面板内的输入框 */
+.doc-manager-panel input {
+    padding: 12px 18px;
+    border: 2px solid #e9e5ff;
+    border-radius: 12px;
+    flex: 1;
+    min-width: 200px;
+    font-size: 15px;
+    transition: all var(--transition-normal);
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+}
+
+.doc-manager-panel input:focus {
+    outline: none;
+    border-color: var(--primary-400);
+    background: white;
+    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.12);
+}
+
+.doc-manager-panel input::placeholder {
+    color: #a78bfa;
+}
+
+.doc-manager-panel .input-group {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.doc-manager-panel .join-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid #f3f0ff;
+}
+
+.doc-manager-panel .join-section h3 {
+    margin: 0 0 16px 0;
+    color: #1e293b;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.doc-manager-panel .join-section h3::before {
+    content: '';
+    width: 4px;
+    height: 18px;
+    background: linear-gradient(180deg, var(--accent-500) 0%, var(--primary-500) 100%);
+    border-radius: 2px;
+}
+
+.doc-manager-panel #document-list {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid #f3f0ff;
+}
+
+.doc-manager-panel #document-list h3 {
+    margin: 0 0 16px 0;
+    color: #1e293b;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.doc-manager-panel #document-list h3::before {
+    content: '';
+    width: 4px;
+    height: 18px;
+    background: linear-gradient(180deg, var(--primary-500) 0%, var(--accent-500) 100%);
+    border-radius: 2px;
+}
+
+.doc-manager-panel .share-info {
+    margin-top: 16px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 10px;
+    border: 1px dashed #ddd6fe;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.doc-manager-panel .share-info p {
+    margin: 0;
+    font-size: 14px;
+    color: #64748b;
+    flex: 1;
+    min-width: 200px;
+}
+
+.doc-manager-panel #current-doc-url {
+    color: var(--primary-600);
+    font-weight: 500;
+    word-break: break-all;
+}
+
+.doc-manager-panel #recent-docs {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.doc-manager-panel #recent-docs li {
+    padding: 12px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.doc-manager-panel #recent-docs li:hover {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(236, 72, 153, 0.06) 100%);
+    border-color: rgba(139, 92, 246, 0.2);
+    transform: translateX(8px);
+}
+
+.doc-manager-panel #recent-docs li:last-child {
+    margin-bottom: 0;
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     margin: 0;
-    padding: 40px 20px;
+    padding: 76px 20px 20px;
     background: var(--bg-gradient);
     background-attachment: fixed;
     min-height: 100vh;
     color: #1e293b;
 }
 
-h1 {
-    text-align: center;
-    color: white;
-    margin-bottom: 50px;
-    font-size: 2.8rem;
-    font-weight: 700;
-    text-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-    letter-spacing: -0.5px;
-    background: linear-gradient(135deg, #ffffff 0%, #ede9fe 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
+
 
 /* 通用按钮样式 */
 .btn {
@@ -345,156 +550,7 @@ h1 {
     margin-top: -50px;
 }
 
-/* 文档管理器 */
-.document-manager {
-    margin: 0 auto 30px;
-    padding: 32px;
-    border-radius: 20px;
-    background: var(--card-gradient);
-    max-width: 1000px;
-    box-shadow: var(--shadow-md);
-    transition: all var(--transition-normal);
-    border: 1px solid rgba(255, 255, 255, 0.8);
-}
 
-.document-manager:hover {
-    box-shadow: var(--shadow-xl);
-    transform: translateY(-2px);
-}
-
-.input-group {
-    display: flex;
-    gap: 14px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.document-manager input {
-    padding: 16px 24px;
-    border: 2px solid #e9e5ff;
-    border-radius: 14px;
-    flex: 1;
-    min-width: 240px;
-    font-size: 16px;
-    transition: all var(--transition-normal);
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-}
-
-.document-manager input:focus {
-    outline: none;
-    border-color: var(--primary-400);
-    background: white;
-    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.12);
-}
-
-.document-manager input::placeholder {
-    color: #a78bfa;
-}
-
-#document-list {
-    margin-top: 30px;
-    padding-top: 28px;
-    border-top: 2px solid #f3f0ff;
-}
-
-#document-list h3 {
-    margin: 0 0 20px 0;
-    color: #1e293b;
-    font-size: 17px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-#document-list h3::before {
-    content: '';
-    width: 4px;
-    height: 20px;
-    background: linear-gradient(180deg, var(--primary-500) 0%, var(--accent-500) 100%);
-    border-radius: 2px;
-}
-
-#recent-docs {
-    list-style-type: none;
-    padding: 0;
-    margin: 0;
-}
-
-#recent-docs li {
-    padding: 16px 20px;
-    border-radius: 14px;
-    cursor: pointer;
-    transition: all var(--transition-normal);
-    margin-bottom: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.6);
-}
-
-#recent-docs li:hover {
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(236, 72, 153, 0.06) 100%);
-    border-color: rgba(139, 92, 246, 0.2);
-    transform: translateX(8px);
-}
-
-#recent-docs li:last-child {
-    margin-bottom: 0;
-}
-
-/* 加入文档区域 */
-.join-section {
-    margin-top: 30px;
-    padding-top: 28px;
-    border-top: 2px solid #f3f0ff;
-}
-
-.join-section h3 {
-    margin: 0 0 20px 0;
-    color: #1e293b;
-    font-size: 17px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.join-section h3::before {
-    content: '';
-    width: 4px;
-    height: 20px;
-    background: linear-gradient(180deg, var(--accent-500) 0%, var(--primary-500) 100%);
-    border-radius: 2px;
-}
-
-.share-info {
-    margin-top: 20px;
-    padding: 16px;
-    background: rgba(255, 255, 255, 0.6);
-    border-radius: 12px;
-    border: 1px dashed #ddd6fe;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.share-info p {
-    margin: 0;
-    font-size: 14px;
-    color: #64748b;
-    flex: 1;
-    min-width: 200px;
-}
-
-#current-doc-url {
-    color: var(--primary-600);
-    font-weight: 500;
-    word-break: break-all;
-}
 
 /* 编辑器容器 */
 .editor-container {
@@ -940,21 +996,28 @@ body.is-longpress .pointer {
 
 /* 响应式设计 */
 @media (max-width: 640px) {
-    h1 {
-        font-size: 2rem;
-        margin-bottom: 30px;
+    .topbar {
+        padding: 0 16px;
+    }
+
+    .topbar-title {
+        font-size: 15px;
+    }
+
+    .topbar-btn span {
+        display: none;
     }
 
     body {
-        padding: 25px 15px;
+        padding: 16px;
     }
 
-    .input-group {
+    .doc-manager-panel .input-group {
         flex-direction: column;
         align-items: stretch;
     }
 
-    .document-manager input {
+    .doc-manager-panel input {
         min-width: 100%;
     }
 
