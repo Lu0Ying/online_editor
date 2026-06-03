@@ -298,6 +298,16 @@ async function initEditor(documentName) {
         const shareUrl = `${window.location.origin}${window.location.pathname}?doc=${documentName}`
         currentDocUrlElement.textContent = shareUrl
     }
+    
+    // 关闭文档管理面板
+    const docManagerPanel = document.getElementById('doc-manager-panel')
+    const docManagerBtn = document.getElementById('topbar-doc-manager-btn')
+    if (docManagerPanel) {
+        docManagerPanel.classList.remove('open')
+    }
+    if (docManagerBtn) {
+        docManagerBtn.classList.remove('active')
+    }
 }
 
 function createEditor() {
@@ -586,6 +596,27 @@ async function renderRecentDocuments(docs) {
 }
 
 function setupEventListeners() {
+    // 顶部导航栏文档管理面板切换
+    const docManagerBtn = document.getElementById('topbar-doc-manager-btn')
+    const docManagerPanel = document.getElementById('doc-manager-panel')
+    
+    if (docManagerBtn && docManagerPanel) {
+        docManagerBtn.addEventListener('click', () => {
+            docManagerPanel.classList.toggle('open')
+            docManagerBtn.classList.toggle('active')
+        })
+        
+        // 点击面板外部关闭
+        document.addEventListener('click', (e) => {
+            if (docManagerPanel.classList.contains('open') && 
+                !docManagerPanel.contains(e.target) && 
+                !docManagerBtn.contains(e.target)) {
+                docManagerPanel.classList.remove('open')
+                docManagerBtn.classList.remove('active')
+            }
+        })
+    }
+
     document.getElementById('create-doc').addEventListener('click', async () => {
         const docName = document.getElementById('document-name').value.trim()
         if (docName) {
