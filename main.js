@@ -472,6 +472,7 @@ function createEditor() {
 const connectionStatus = createConnectionStatusPanel()
 setConnectionStatusElement(connectionStatus)
 createUserInfoPanel(userName, userColor)
+updateUserInfoPanel(userName)
 
 // 调用粒子背景效果和点击特效
 createParticleBackground()
@@ -962,14 +963,10 @@ function setupRename() {
 }
 
 function updateUserInfoPanel(newName) {
-    // 更新用户信息面板
-    const userInfoPanel = document.querySelector('[style*="position: fixed"][style*="bottom: 55px"][style*="right: 10px"]')
-    if (userInfoPanel) {
-        userInfoPanel.innerHTML = `<div style="display: flex; align-items: center; gap: 8px;">
-            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${userColor};"></div>
-            <span>${newName}</span>
-            <span style="color: #999; font-size: 11px;">（你的专属颜色）</span>
-        </div>`
+    // 更新当前用户名称显示
+    const currentUserNameEl = document.getElementById('current-user-name')
+    if (currentUserNameEl) {
+        currentUserNameEl.textContent = newName
     }
 }
 
