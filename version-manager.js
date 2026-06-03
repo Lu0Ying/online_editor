@@ -120,37 +120,59 @@ class VersionManager {
                 update[i] = binaryString.charCodeAt(i)
             }
             
-            // 创建临时文档
-            const tempDoc = new Y.Doc()
-            Y.applyUpdate(tempDoc, update)
+            console.log('🔄 开始恢复快照')
             
-            // 获取快照的文本内容
-            const snapshotContent = tempDoc.get('content', Y.XmlFragment)
-            const textContent = this._extractText(snapshotContent)
-            
-            tempDoc.destroy()
-            
-            // 获取当前文档的内容
+            // 获取当前内容
             const currentContent = doc.get('content', Y.XmlFragment)
             
-            // 清空当前内容
+            // 在事务中清空并应用更新
             doc.transact(() => {
+                // 清空当前内容
                 if (currentContent.length > 0) {
                     currentContent.delete(0, currentContent.length)
                 }
+                
+                // 创建临时文档获取快照状态
+                const tempDoc = new Y.Doc()
+                Y.applyUpdate(tempDoc, update)
+                
+                // 获取快照内容
+                const snapshotContent = tempDoc.get('content', Y.XmlFragment)
+                
+                // 逐个复制元素
+                snapshotContent.forEach((node) => {
+                    if (node instanceof Y.XmlElement) {
+                        const el = new Y.XmlElement(node.tagName || 'paragraph')
+                        
+                        // 复制属性
+                        const attrs = node.getAttributes()
+                        Object.keys(attrs).forEach(key => {
+                            el.setAttribute(key, attrs[key])
+                        })
+                        
+                        // 复制子节点
+                        node.forEach((child) => {
+                            if (child instanceof Y.XmlText) {
+                                const text = new Y.XmlText()
+                                el.push([text])
+                                // 使用 delta 复制内容
+                                const delta = child.toDelta()
+                                delta.forEach(op => {
+                                    if (op.insert) {
+                                        text.insert(text.length, op.insert, op.attributes || {})
+                                    }
+                                })
+                            }
+                        })
+                        
+                        currentContent.push([el])
+                    }
+                })
+                
+                tempDoc.destroy()
             })
             
-            // 直接插入整个文本作为单个段落
-            doc.transact(() => {
-                const paragraph = new Y.XmlElement('paragraph')
-                const textNode = new Y.XmlText()
-                // 将换行符替换为特殊的格式保留在文本中
-                textNode.insert(0, textContent)
-                paragraph.insert(0, [textNode])
-                currentContent.insert(0, [paragraph])
-            })
-            
-            console.log('✅ 快照已恢复:', snapshotId, '文本长度:', textContent.length)
+            console.log('✅ 快照已恢复:', snapshotId)
             return snapshot
         } catch (error) {
             console.error('❌ 恢复快照失败:', error)
@@ -276,12 +298,21 @@ class VersionManager {
                 let elementCount = 0
                 element.forEach((child, index) => {
                     if (child instanceof Y.XmlText) {
-                        const delta = child.toDelta()
-                        delta.forEach(op => {
-                            if (typeof op.insert === 'string') {
-                                text += op.insert
+                        try {
+                            const delta = child.toDelta()
+                            delta.forEach(op => {
+                                if (typeof op.insert === 'string') {
+                                    text += op.insert
+                                }
+                            })
+                        } catch (e) {
+                            // 如果 delta 失败，尝试 toString
+                            try {
+                                text += child.toString()
+                            } catch (e2) {
+                                // 跳过这个文本节点
                             }
-                        })
+                        }
                     } else if (child instanceof Y.XmlElement) {
                         const tagName = (child.tagName || '').toLowerCase()
                         // 扩展块级标签列表
@@ -320,7 +351,6 @@ class VersionManager {
         // 清理连续超过2个的换行
         text = text.replace(/\n{3,}/g, '\n\n')
         
-        console.log('📝 _extractText 提取的文本:', JSON.stringify(text).substring(0, 200))
         return text
     }
 
