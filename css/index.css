@@ -1595,7 +1595,6 @@ body.is-longpress .pointer {
     padding: 20px 24px;
     background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%);
     color: white;
-    border-radius: 20px 20px 0 0;
 }
 
 .version-panel .version-panel-header h2 {
@@ -1626,7 +1625,7 @@ body.is-longpress .pointer {
 
 .version-panel .version-panel-body {
     background: var(--card-gradient);
-    border-radius: 0 0 20px 20px;
+    border-radius: 20px;
     width: 90%;
     max-width: 800px;
     max-height: 80vh;
