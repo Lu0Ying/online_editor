@@ -15,7 +15,7 @@ import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
-import { clickEffect, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement, updateOnlineUsersList } from './beautify.js'
+import { mouseShadow, createParticleBackground, generateRandomColor, updateConnectionStatus, createUserInfoPanel, createConnectionStatusPanel, setConnectionStatusElement, updateOnlineUsersList } from './beautify.js'
 import { initChatModule, setupChat, setupChatSync, resetChatMessages, updateUserInfo } from './chat.js'
 import { CollaborativeImage, CollaborativeVideo } from './media/media-extension.js'
 import { ChunkedUploader } from './media/chunked-uploader.js'
@@ -657,9 +657,9 @@ setConnectionStatusElement(connectionStatus)
 createUserInfoPanel(userName, userColor)
 updateUserInfoPanel(userName)
 
-// 调用粒子背景效果和点击特效
+// 调用粒子背景效果和鼠标阴影
 createParticleBackground()
-clickEffect()
+mouseShadow()
 
 
 
