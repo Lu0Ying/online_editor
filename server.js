@@ -218,6 +218,38 @@ async function startServer() {
                 return
             }
             
+            // 处理 /api/load-document 请求 - 读取原始文档内容
+            if (req.url.startsWith('/api/load-document') && req.method === 'GET') {
+                const url = new URL(req.url, `http://${req.headers.host}`)
+                const documentName = url.searchParams.get('name')
+                
+                if (!documentName) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Document name is required' }))
+                    return
+                }
+                
+                try {
+                    const filePath = path.join(onlinetextDir, documentName)
+                    const content = await fs.readFile(filePath, 'utf8')
+                    const documentData = JSON.parse(content)
+                    
+                    console.log('📄 Raw document content loaded:', documentName)
+                    res.writeHead(200, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify(documentData))
+                } catch (error) {
+                    if (error.code === 'ENOENT') {
+                        res.writeHead(404, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ error: 'Document not found' }))
+                    } else {
+                        console.error('Error loading raw document:', error)
+                        res.writeHead(500, { 'Content-Type': 'application/json' })
+                        res.end(JSON.stringify({ error: 'Failed to load document' }))
+                    }
+                }
+                return
+            }
+            
             // 处理 /api/documents 请求 - 获取文档列表或删除文档
             if (req.url.startsWith('/api/documents')) {
                 // GET - 获取文档列表
@@ -355,7 +387,7 @@ async function startServer() {
                     req.on('end', async () => {
                         try {
                             const data = JSON.parse(body)
-                            const { documentName, content, description } = data
+                            const { documentName, content, description, originalContent } = data
                             
                             if (!documentName || !content) {
                                 res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -368,6 +400,7 @@ async function startServer() {
                                 id: snapshotId,
                                 documentName,
                                 content,
+                                originalContent: originalContent || '',
                                 description: description || `快照 - ${new Date().toLocaleString('zh-CN')}`,
                                 timestamp: Date.now(),
                                 createdAt: new Date().toISOString()
