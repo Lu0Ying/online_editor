@@ -42,9 +42,24 @@ class VersionManager {
             const binaryString = Array.from(update, byte => String.fromCharCode(byte)).join('')
             const base64State = btoa(binaryString)
             
+            // 读取onlinetext文件夹中的原始json文件内容
+            let originalContent = ''
+            const fileName = documentName + '.json'
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/load-document?name=${encodeURIComponent(fileName)}`)
+                if (response.ok) {
+                    const data = await response.json()
+                    originalContent = JSON.stringify(data, null, 2)
+                    console.log('📄 已读取原始文档内容，长度:', originalContent.length)
+                }
+            } catch (readError) {
+                console.warn('⚠️ 无法读取原始文档文件:', readError.message)
+            }
+            
             const requestBody = {
                 documentName,
                 content: base64State,
+                originalContent,
                 description: description || this._generateDescription()
             }
             
@@ -113,65 +128,90 @@ class VersionManager {
         }
         
         try {
-            // 解码base64内容
+            // 如果存在原始JSON内容，优先使用它来恢复
+            if (snapshot.originalContent) {
+                console.log('📤 使用原始JSON内容恢复文档')
+                try {
+                    const originalData = JSON.parse(snapshot.originalContent)
+                    if (originalData.data) {
+                        // 解码原始JSON中的data字段
+                        const binaryString = atob(originalData.data)
+                        const update = new Uint8Array(binaryString.length)
+                        for (let i = 0; i < binaryString.length; i++) {
+                            update[i] = binaryString.charCodeAt(i)
+                        }
+                        
+                        // 先创建一个新文档加载快照内容
+                        const tempDoc = new Y.Doc()
+                        Y.applyUpdate(tempDoc, update)
+                        
+                        // 获取快照和当前文档的内容
+                        const snapshotContent = tempDoc.get('content', Y.XmlFragment)
+                        const currentContent = doc.get('content', Y.XmlFragment)
+                        
+                        // 清空当前文档内容
+                        doc.transact(() => {
+                            while (currentContent.length > 0) {
+                                currentContent.delete(0, currentContent.length)
+                            }
+                        })
+                        
+                        // 复制快照内容到当前文档
+                        doc.transact(() => {
+                            snapshotContent.forEach((child) => {
+                                if (child instanceof Y.XmlElement) {
+                                    currentContent.push([child.clone()])
+                                } else if (child instanceof Y.XmlText) {
+                                    const newText = new Y.XmlText(child.toString())
+                                    currentContent.push([newText])
+                                }
+                            })
+                        })
+                        
+                        tempDoc.destroy()
+                        console.log('✅ 使用原始JSON内容恢复成功:', snapshotId)
+                        return snapshot
+                    }
+                } catch (jsonError) {
+                    console.warn('⚠️ 使用原始JSON恢复失败，回退到标准方式:', jsonError.message)
+                }
+            }
+            
+            // 标准恢复方式
             const binaryString = atob(snapshot.content)
             const update = new Uint8Array(binaryString.length)
             for (let i = 0; i < binaryString.length; i++) {
                 update[i] = binaryString.charCodeAt(i)
             }
             
-            console.log('🔄 开始恢复快照')
+            // 创建临时文档
+            const tempDoc = new Y.Doc()
+            Y.applyUpdate(tempDoc, update)
             
-            // 获取当前内容
+            // 获取快照和当前文档的内容
+            const snapshotContent = tempDoc.get('content', Y.XmlFragment)
             const currentContent = doc.get('content', Y.XmlFragment)
             
-            // 在事务中清空并应用更新
+            // 清空当前文档内容
             doc.transact(() => {
-                // 清空当前内容
-                if (currentContent.length > 0) {
+                while (currentContent.length > 0) {
                     currentContent.delete(0, currentContent.length)
                 }
-                
-                // 创建临时文档获取快照状态
-                const tempDoc = new Y.Doc()
-                Y.applyUpdate(tempDoc, update)
-                
-                // 获取快照内容
-                const snapshotContent = tempDoc.get('content', Y.XmlFragment)
-                
-                // 逐个复制元素
-                snapshotContent.forEach((node) => {
-                    if (node instanceof Y.XmlElement) {
-                        const el = new Y.XmlElement(node.tagName || 'paragraph')
-                        
-                        // 复制属性
-                        const attrs = node.getAttributes()
-                        Object.keys(attrs).forEach(key => {
-                            el.setAttribute(key, attrs[key])
-                        })
-                        
-                        // 复制子节点
-                        node.forEach((child) => {
-                            if (child instanceof Y.XmlText) {
-                                const text = new Y.XmlText()
-                                el.push([text])
-                                // 使用 delta 复制内容
-                                const delta = child.toDelta()
-                                delta.forEach(op => {
-                                    if (op.insert) {
-                                        text.insert(text.length, op.insert, op.attributes || {})
-                                    }
-                                })
-                            }
-                        })
-                        
-                        currentContent.push([el])
-                    }
-                })
-                
-                tempDoc.destroy()
             })
             
+            // 复制快照内容到当前文档
+            doc.transact(() => {
+                snapshotContent.forEach((child) => {
+                    if (child instanceof Y.XmlElement) {
+                        currentContent.push([child.clone()])
+                    } else if (child instanceof Y.XmlText) {
+                        const newText = new Y.XmlText(child.toString())
+                        currentContent.push([newText])
+                    }
+                })
+            })
+            
+            tempDoc.destroy()
             console.log('✅ 快照已恢复:', snapshotId)
             return snapshot
         } catch (error) {
@@ -199,8 +239,9 @@ class VersionManager {
     _generateDiff(snap1, snap2) {
         // 解码内容进行详细对比
         try {
-            const content1 = this._getTextContent(snap1?.content)
-            const content2 = this._getTextContent(snap2?.content)
+            // 优先使用原始JSON内容进行对比
+            const content1 = this._getContentForDiff(snap1)
+            const content2 = this._getContentForDiff(snap2)
             
             const diff = {
                 snapshot1: {
@@ -265,6 +306,38 @@ class VersionManager {
         }
     }
 
+    _getContentForDiff(snapshot) {
+        if (!snapshot) return ''
+        
+        // 优先使用原始JSON内容进行对比
+        if (snapshot.originalContent) {
+            try {
+                const originalData = JSON.parse(snapshot.originalContent)
+                if (originalData.data) {
+                    const binaryString = atob(originalData.data)
+                    const update = new Uint8Array(binaryString.length)
+                    for (let i = 0; i < binaryString.length; i++) {
+                        update[i] = binaryString.charCodeAt(i)
+                    }
+                    
+                    const tempDoc = new Y.Doc()
+                    Y.applyUpdate(tempDoc, update)
+                    
+                    const content = tempDoc.get('content', Y.XmlFragment)
+                    const text = this._extractText(content)
+                    tempDoc.destroy()
+                    
+                    return text
+                }
+            } catch (error) {
+                console.warn('使用原始JSON内容对比失败，回退到标准方式:', error.message)
+            }
+        }
+        
+        // 回退到标准方式
+        return this._getTextContent(snapshot.content)
+    }
+
     _getTextContent(base64Content) {
         if (!base64Content) return ''
         
@@ -298,40 +371,46 @@ class VersionManager {
                 let elementCount = 0
                 element.forEach((child, index) => {
                     if (child instanceof Y.XmlText) {
-                        try {
-                            const delta = child.toDelta()
-                            delta.forEach(op => {
-                                if (typeof op.insert === 'string') {
-                                    text += op.insert
-                                }
-                            })
-                        } catch (e) {
-                            // 如果 delta 失败，尝试 toString
-                            try {
-                                text += child.toString()
-                            } catch (e2) {
-                                // 跳过这个文本节点
+                        const delta = child.toDelta()
+                        delta.forEach(op => {
+                            if (typeof op.insert === 'string') {
+                                text += op.insert
                             }
-                        }
+                        })
                     } else if (child instanceof Y.XmlElement) {
                         const tagName = (child.tagName || '').toLowerCase()
-                        // 扩展块级标签列表
+                        const attrs = child.getAttributes()
+                        
                         const blockTags = ['paragraph', 'p', 'heading', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'listitem', 'li', 'codeblock', 'pre', 'div', 'section', 'br']
                         const isBlock = blockTags.includes(tagName)
                         
-                        // 在块级元素之间添加换行
                         if (preserveStructure && isBlock && elementCount > 0 && !text.endsWith('\n')) {
                             text += '\n'
                         }
                         
-                        text += this._extractText(child, preserveStructure)
+                        if (tagName === 'video') {
+                            const src = attrs.src || '无URL'
+                            text += `[视频: ${src}]`
+                        } else if (attrs['data-collaborative-video']) {
+                            const videoId = attrs['data-collaborative-video'] || '无ID'
+                            text += `[视频: /api/files/${videoId}]`
+                        } else if (tagName === 'img' || attrs.src) {
+                            const src = attrs.src || '无URL'
+                            const alt = attrs.alt || '无描述'
+                            // 如果alt是默认的"无描述"，则显示为视频
+                            if (alt === '无描述') {
+                                text += `[视频: ${src}]`
+                            } else {
+                                text += `[图片: ${alt} - ${src}]`
+                            }
+                        } else {
+                            text += this._extractText(child, preserveStructure)
+                        }
                         
-                        // 处理 <br> 标签
                         if (tagName === 'br') {
                             text += '\n'
                         }
                         
-                        // 在块级元素后添加换行
                         if (preserveStructure && isBlock && !text.endsWith('\n')) {
                             text += '\n'
                         }
@@ -339,16 +418,35 @@ class VersionManager {
                         elementCount++
                     }
                 })
+            } else if (element instanceof Y.XmlElement) {
+                const tagName = (element.tagName || '').toLowerCase()
+                const attrs = element.getAttributes()
+                
+                if (tagName === 'video') {
+                    const src = attrs.src || '无URL'
+                    text += `[视频: ${src}]`
+                } else if (attrs['data-collaborative-video']) {
+                    const videoId = attrs['data-collaborative-video'] || '无ID'
+                    text += `[视频: /api/files/${videoId}]`
+                } else if (tagName === 'img' || attrs.src) {
+                    const src = attrs.src || '无URL'
+                    const alt = attrs.alt || '无描述'
+                    // 如果alt是默认的"无描述"，则显示为视频
+                    if (alt === '无描述') {
+                        text += `[视频: ${src}]`
+                    } else {
+                        text += `[图片: ${alt} - ${src}]`
+                    }
+                } else if (typeof element.forEach === 'function') {
+                    text += this._extractText(element, preserveStructure)
+                }
             }
         } catch (error) {
             console.error('提取文本失败:', error)
         }
         
-        // 清理开头多余的换行
         text = text.replace(/^\n+/, '')
-        // 保留结尾最多一个换行
         text = text.replace(/\n+$/, '') + '\n'
-        // 清理连续超过2个的换行
         text = text.replace(/\n{3,}/g, '\n\n')
         
         return text
@@ -498,11 +596,11 @@ export async function initVersionManagerUI() {
     versionPanel.className = 'version-panel'
     versionPanel.style.display = 'none'
     versionPanel.innerHTML = `
-        <div class="version-panel-header">
-            <h2>版本管理</h2>
-            <button id="close-version-panel" class="close-btn">&times;</button>
-        </div>
         <div class="version-panel-body">
+            <div class="version-panel-header">
+                <h2>版本管理</h2>
+                <button id="close-version-panel" class="close-btn">&times;</button>
+            </div>
             <div class="current-doc-info" style="padding: 12px 24px; background: rgba(14, 165, 233, 0.1); border-radius: 8px; margin: 16px 24px; display: flex; align-items: center; gap: 8px;">
                 <span style="font-weight: 600; color: var(--primary-700);">当前文档:</span>
                 <span id="version-current-doc-name" style="color: var(--primary-600);">未打开</span>
