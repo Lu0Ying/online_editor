@@ -21,6 +21,7 @@ import { CollaborativeImage, CollaborativeVideo } from './media/media-extension.
 import { ChunkedUploader } from './media/chunked-uploader.js'
 import { exportDocumentWithMedia } from './media/export-utils.js'
 import MarkdownIt from 'markdown-it'
+import { initVersionManagerUI, showVersionPanel, versionManager } from './version-manager.js'
 
 const md = new MarkdownIt({
     html: true,
@@ -254,16 +255,19 @@ async function initEditor(documentName, docType = 'markdown') {
         console.log('Destroying existing ydoc...')
         ydoc.destroy()
         ydoc = null
+        window.ydoc = null  // 清除全局引用
     }
     
     // 重置聊天消息
     resetChatMessages()
     
     currentDocumentName = documentName
+    window.currentDocumentName = documentName  // 暴露给版本管理模块
     
     updateConnectionStatus('connecting')
     
     ydoc = new Y.Doc()
+    window.ydoc = ydoc  // 暴露给版本管理模块
     
     // 存储/读取文档类型到 Yjs 元数据（同步到其他用户）
     const metadata = ydoc.getMap('_metadata')
@@ -458,6 +462,16 @@ async function initEditor(documentName, docType = 'markdown') {
         const shareUrl = `${window.location.origin}${window.location.pathname}?doc=${documentName}`
         currentDocUrlElement.textContent = shareUrl
     }
+    
+    // 关闭文档管理面板
+    const docManagerPanel = document.getElementById('doc-manager-panel')
+    const docManagerBtn = document.getElementById('topbar-doc-manager-btn')
+    if (docManagerPanel) {
+        docManagerPanel.classList.remove('open')
+    }
+    if (docManagerBtn) {
+        docManagerBtn.classList.remove('active')
+    }
 }
 
 function createEditor(docType = 'markdown') {
@@ -620,6 +634,8 @@ function createEditor(docType = 'markdown') {
             }
         })
         
+        window.editor = editor  // 暴露给版本管理模块
+        
         setTimeout(() => {
             if (editor) {
                 editor.commands.focus()
@@ -639,6 +655,7 @@ function createEditor(docType = 'markdown') {
 const connectionStatus = createConnectionStatusPanel()
 setConnectionStatusElement(connectionStatus)
 createUserInfoPanel(userName, userColor)
+updateUserInfoPanel(userName)
 
 // 调用粒子背景效果和点击特效
 createParticleBackground()
@@ -702,8 +719,10 @@ async function deleteDocument(documentName) {
             if (ydoc) {
                 ydoc.destroy()
                 ydoc = null
+                window.ydoc = null  // 清除全局引用
             }
             currentDocumentName = 'test_document'
+            window.currentDocumentName = 'test_document'  // 更新全局引用
             const docNameElement = document.getElementById('current-doc-name')
             if (docNameElement) {
                 docNameElement.textContent = '当前文档: test_document'
@@ -775,7 +794,36 @@ async function renderRecentDocuments(docs) {
     })
 }
 
+function setupVersionManager() {
+    initVersionManagerUI()
+    
+    document.getElementById('version-btn').addEventListener('click', () => {
+        showVersionPanel()
+    })
+}
+
 function setupEventListeners() {
+    // 顶部导航栏文档管理面板切换
+    const docManagerBtn = document.getElementById('topbar-doc-manager-btn')
+    const docManagerPanel = document.getElementById('doc-manager-panel')
+    
+    if (docManagerBtn && docManagerPanel) {
+        docManagerBtn.addEventListener('click', () => {
+            docManagerPanel.classList.toggle('open')
+            docManagerBtn.classList.toggle('active')
+        })
+        
+        // 点击面板外部关闭
+        document.addEventListener('click', (e) => {
+            if (docManagerPanel.classList.contains('open') && 
+                !docManagerPanel.contains(e.target) && 
+                !docManagerBtn.contains(e.target)) {
+                docManagerPanel.classList.remove('open')
+                docManagerBtn.classList.remove('active')
+            }
+        })
+    }
+
     document.getElementById('create-doc').addEventListener('click', async () => {
         const docName = document.getElementById('document-name').value.trim()
         if (docName) {
@@ -1127,14 +1175,10 @@ function setupRename() {
 }
 
 function updateUserInfoPanel(newName) {
-    // 更新用户信息面板
-    const userInfoPanel = document.querySelector('[style*="position: fixed"][style*="bottom: 55px"][style*="right: 10px"]')
-    if (userInfoPanel) {
-        userInfoPanel.innerHTML = `<div style="display: flex; align-items: center; gap: 8px;">
-            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${userColor};"></div>
-            <span>${newName}</span>
-            <span style="color: #999; font-size: 11px;">（你的专属颜色）</span>
-        </div>`
+    // 更新当前用户名称显示
+    const currentUserNameEl = document.getElementById('current-user-name')
+    if (currentUserNameEl) {
+        currentUserNameEl.textContent = newName
     }
 }
 
@@ -1386,6 +1430,7 @@ async function init() {
     setupEventListeners()
     setupMediaUpload()
     setupMarkdownToolbar()
+    setupVersionManager()
     
     updateConnectionStatus('connecting')
     

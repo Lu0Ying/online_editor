@@ -11,28 +11,48 @@
     <!-- 系统消息通知容器 -->
     <div id="system-notifications" class="system-notifications"></div>
 
-    <h1>实时协作文档编辑器</h1>
+    <!-- 顶部导航栏 -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <span class="topbar-title">实时协作文档编辑器</span>
+        </div>
+        <div class="topbar-right">
+            <button id="topbar-doc-manager-btn" class="topbar-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                文档管理
+            </button>
+        </div>
+    </div>
 
-    <div class="document-manager">
-        <div class="input-group">
-            <input type="text" id="document-name" placeholder="输入文档名称（例如：项目计划）" />
-            <button id="create-doc" class="btn btn-primary">创建新文档</button>
-            <button id="open-doc" class="btn btn-secondary">打开文档</button>
-        </div>
-        <div class="join-section">
-            <h3>加入已有文档</h3>
+    <!-- 文档管理展开面板 -->
+    <div id="doc-manager-panel" class="doc-manager-panel">
+        <div class="doc-manager-panel-inner">
             <div class="input-group">
-                <input type="text" id="document-id" placeholder="输入文档编号或粘贴文档链接" />
-                <button id="join-doc" class="btn btn-accent">加入文档</button>
+                <input type="text" id="document-name" placeholder="输入文档名称（例如：项目计划）" />
+                <button id="create-doc" class="btn btn-primary">创建新文档</button>
+                <button id="open-doc" class="btn btn-secondary">打开文档</button>
             </div>
-            <div class="share-info">
-                <p>分享此文档给他人：<span id="current-doc-url">无</span></p>
-                <button id="copy-link" class="btn btn-sm btn-secondary">复制链接</button>
+            <div class="join-section">
+                <h3>加入已有文档</h3>
+                <div class="input-group">
+                    <input type="text" id="document-id" placeholder="输入文档编号或粘贴文档链接" />
+                    <button id="join-doc" class="btn btn-accent">加入文档</button>
+                </div>
+                <div class="share-info">
+                    <p>分享此文档给他人：<span id="current-doc-url">无</span></p>
+                    <button id="copy-link" class="btn btn-sm btn-secondary">复制链接</button>
+                </div>
             </div>
-        </div>
-        <div id="document-list">
-            <h3>最近文档</h3>
-            <ul id="recent-docs"></ul>
+            <div id="document-list">
+                <h3>最近文档</h3>
+                <ul id="recent-docs"></ul>
+            </div>
         </div>
     </div>
 
@@ -51,6 +71,9 @@
                     </select>
                     <button id="export-btn" class="btn btn-secondary">导出文档</button>
                 </div>
+                <button id="version-btn" class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-size: 12px;">
+                    📋 版本管理
+                </button>
                 <span class="collaboration-info">多人实时协作 • 自动保存</span>
             </div>
         </div>
@@ -58,7 +81,12 @@
             style="padding: 10px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; display: flex; align-items: center; gap: 10px; font-size: 14px;">
             <span style="font-weight: bold;">在线用户:</span>
             <div id="online-users-list" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
-            <button id="rename-btn" class="btn btn-sm btn-secondary" style="margin-left: auto; padding: 4px 12px; font-size: 12px;">
+        </div>
+        <div id="current-user-bar"
+            style="padding: 8px 10px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+            <span style="font-weight: bold;">当前用户:</span>
+            <span id="current-user-name" style="color: #1e293b;">加载中...</span>
+            <button id="rename-btn" class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-size: 12px;">
                 重命名
             </button>
         </div>
